@@ -11,7 +11,7 @@ function base64ToUint8Array(base64: string): Uint8Array<ArrayBuffer> {
   return output;
 }
 
-export function PushSetup({ demoMode }: { demoMode: boolean }) {
+export function PushSetup({ demoMode, wakePromptEnabled, wakePromptTime }: { demoMode: boolean; wakePromptEnabled: boolean; wakePromptTime: string }) {
   const [standalone] = useState(() => typeof window !== "undefined" && (window.matchMedia("(display-mode: standalone)").matches || (navigator as Navigator & { standalone?: boolean }).standalone === true));
   const [status, setStatus] = useState<NotificationPermission | "unsupported">(() => typeof window !== "undefined" && "Notification" in window ? Notification.permission : "unsupported");
   const [message, setMessage] = useState("");
@@ -39,19 +39,22 @@ export function PushSetup({ demoMode }: { demoMode: boolean }) {
     const registration = await navigator.serviceWorker.ready;
     const subscription = await registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: base64ToUint8Array(publicKey) });
     const response = await fetch("/api/push/subscribe", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(subscription.toJSON()) });
+    if (response.ok) {
+      await fetch("/api/push/day-start", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ enabled: wakePromptEnabled, time: wakePromptTime }) });
+    }
     setMessage(response.ok ? "Lembretes ativados neste dispositivo." : "Não foi possível salvar este dispositivo.");
   }
 
-  async function test() {
-    const response = await fetch("/api/push/test", { method: "POST" });
-    setMessage(response.ok ? "Notificação de teste enviada." : "O teste não pôde ser enviado.");
+  async function test(kind: "day_start" | "medication") {
+    const response = await fetch("/api/push/test", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ kind }) });
+    setMessage(response.ok ? "Exemplo enviado ao seu iPhone." : "O teste não pôde ser enviado.");
   }
 
   return (
     <div className="settings-card">
       <div className="card-title-row"><div><h2>Lembretes</h2><p>Web Push no iPhone exige instalação na Tela de Início.</p></div><span className={`status-dot ${status === "granted" ? "enabled" : ""}`}>{status === "granted" ? "Ativos" : "Inativos"}</span></div>
       {!standalone && <div className="install-tip"><Smartphone aria-hidden="true" /><div><strong>Instale primeiro no iPhone</strong><p>No Safari, toque em Compartilhar e depois em “Adicionar à Tela de Início”.</p></div></div>}
-      <div className="button-row"><button className="primary-button button-with-icon" type="button" onClick={enable}><BellRing aria-hidden="true" /> Ativar lembretes</button>{status === "granted" && !demoMode && <button className="secondary-button button-with-icon" type="button" onClick={test}><Send aria-hidden="true" /> Enviar teste</button>}</div>
+      <div className="button-row"><button className="primary-button button-with-icon" type="button" onClick={enable}><BellRing aria-hidden="true" /> Ativar lembretes</button>{status === "granted" && !demoMode && <><button className="secondary-button button-with-icon" type="button" onClick={() => test("day_start")}><Send aria-hidden="true" /> Testar bom dia</button><button className="secondary-button button-with-icon" type="button" onClick={() => test("medication")}><Send aria-hidden="true" /> Testar remédio</button></>}</div>
       {message && <p className="form-message" role="status">{message}</p>}
     </div>
   );
