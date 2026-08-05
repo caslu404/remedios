@@ -3,6 +3,27 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
+  ArrowRight,
+  CircleAlert,
+  Cloud,
+  CloudOff,
+  Download,
+  History,
+  House,
+  Info,
+  ListChecks,
+  LogOut,
+  Save,
+  Settings,
+  ShieldCheck,
+  Sun,
+  Trash2,
+  Utensils,
+  X,
+  type LucideIcon,
+} from "lucide-react";
+import { BrandMark } from "@/components/brand-mark";
+import {
   INITIAL_TREATMENT_PHASES,
   formatClock,
   generateDailySchedule,
@@ -264,14 +285,14 @@ export function TreatmentApp({ demoMode }: { demoMode: boolean }) {
   }, [schedule, clockTick]);
 
   if (loading) {
-    return <main className="app-loading"><span className="brand-mark">T</span><p>Preparando seu dia…</p></main>;
+    return <main className="app-loading"><BrandMark /><p>Preparando seu dia…</p></main>;
   }
 
   if (!preferences.acceptedNotice) {
     return (
       <main className="onboarding-shell">
         <section className="onboarding-card">
-          <span className="brand-mark">T</span>
+          <BrandMark />
           <p className="eyebrow">Antes de começar</p>
           <h1>Organização, nunca prescrição.</h1>
           <p className="lead">Este app organiza os horários cadastrados e registra o que aconteceu. Ele não altera doses, não recomenda compensações e não substitui seu médico ou farmacêutico.</p>
@@ -289,12 +310,15 @@ export function TreatmentApp({ demoMode }: { demoMode: boolean }) {
   return (
     <div className="app-frame">
       <header className="app-header">
-        <div className="brand-lockup"><span className="brand-mark small">T</span><div><strong>Tratamento</strong><span>adaptativo</span></div></div>
-        <div className={`connection-pill ${online ? "online" : "offline"}`}><span />{online ? (demoMode ? "Neste aparelho" : "Sincronizado") : "Modo offline"}</div>
+        <div className="brand-lockup" aria-label="Tratamento adaptativo"><BrandMark small /><div><strong>Tratamento</strong><span>adaptativo</span></div></div>
+        <div className={`connection-pill ${online ? "online" : "offline"}`}>
+          {online ? <Cloud aria-hidden="true" /> : <CloudOff aria-hidden="true" />}
+          {online ? (demoMode ? "Neste aparelho" : "Sincronizado") : "Modo offline"}
+        </div>
       </header>
 
       <main className="app-main">
-        {notice && <div className="toast" role="status"><span>{notice}</span><button aria-label="Fechar aviso" onClick={() => setNotice("")}>×</button></div>}
+        {notice && <div className="toast" role="status"><span>{notice}</span><button aria-label="Fechar aviso" onClick={() => setNotice("")}><X aria-hidden="true" /></button></div>}
         {today >= "2026-08-06" && today <= "2026-08-22" && <div className="alcohol-warning"><strong>Sem álcool</strong><span>Durante o metronidazol e por pelo menos 3 dias após a última dose.</span></div>}
         {tab === "today" && (
           <TodayView
@@ -320,17 +344,17 @@ export function TreatmentApp({ demoMode }: { demoMode: boolean }) {
       </main>
 
       <nav className="bottom-nav" aria-label="Navegação principal">
-        <NavButton active={tab === "today"} label="Hoje" symbol="●" onClick={() => setTab("today")} />
-        <NavButton active={tab === "history"} label="Histórico" symbol="▦" onClick={() => setTab("history")} />
-        <NavButton active={tab === "rules"} label="Regras" symbol="≡" onClick={() => setTab("rules")} />
-        <NavButton active={tab === "settings"} label="Ajustes" symbol="⚙" onClick={() => setTab("settings")} />
+        <NavButton active={tab === "today"} label="Hoje" icon={House} onClick={() => setTab("today")} />
+        <NavButton active={tab === "history"} label="Histórico" icon={History} onClick={() => setTab("history")} />
+        <NavButton active={tab === "rules"} label="Regras" icon={ListChecks} onClick={() => setTab("rules")} />
+        <NavButton active={tab === "settings"} label="Ajustes" icon={Settings} onClick={() => setTab("settings")} />
       </nav>
     </div>
   );
 }
 
-function NavButton({ active, label, symbol, onClick }: { active: boolean; label: string; symbol: string; onClick: () => void }) {
-  return <button className={active ? "active" : ""} onClick={onClick} aria-current={active ? "page" : undefined}><span aria-hidden="true">{symbol}</span>{label}</button>;
+function NavButton({ active, label, icon: Icon, onClick }: { active: boolean; label: string; icon: LucideIcon; onClick: () => void }) {
+  return <button className={active ? "active" : ""} onClick={onClick} aria-current={active ? "page" : undefined}><Icon aria-hidden="true" /><span>{label}</span></button>;
 }
 
 interface TodayProps {
@@ -358,11 +382,11 @@ function TodayView(props: TodayProps) {
         <h1>Bom dia, {props.name}.<br /><span>Que horas você acordou?</span></h1>
         <p className="lead">O horário real de despertar organiza os alvos do dia. Você poderá revisar tudo antes de confirmar.</p>
         <div className="wake-actions">
-          <button className="wake-button" onClick={() => props.startDay(nowInSaoPaulo().time)}><span className="sun-symbol" aria-hidden="true">✦</span><span><strong>Acordei agora</strong><small>Usar {nowInSaoPaulo().time}</small></span><b aria-hidden="true">→</b></button>
+          <button className="wake-button" onClick={() => props.startDay(nowInSaoPaulo().time)}><span className="sun-symbol" aria-hidden="true"><Sun /></span><span><strong>Acordei agora</strong><small>Usar {nowInSaoPaulo().time}</small></span><ArrowRight aria-hidden="true" /></button>
           <div className="manual-time"><label htmlFor="wake-time">Informar outro horário</label><div><input id="wake-time" type="time" value={props.manualWake} onChange={(event) => props.setManualWake(event.target.value)} /><button onClick={() => props.startDay(props.manualWake)}>Montar cronograma</button></div></div>
           <button className="quiet-button">Ainda não quero iniciar o dia</button>
         </div>
-        <p className="safety-line"><span aria-hidden="true">◆</span> Nenhuma tolerância clínica será presumida.</p>
+        <p className="safety-line"><ShieldCheck aria-hidden="true" /> Nenhuma tolerância clínica será presumida.</p>
       </section>
     );
   }
@@ -383,13 +407,13 @@ function TodayView(props: TodayProps) {
           <div className="next-label"><span>Próxima ação</span><b>{props.nextDose.scheduledMinute === null ? "Revisar" : formatClock(props.nextDose.scheduledMinute)}</b></div>
           <h2>{props.nextDose.medicationName}</h2>
           <p>{props.nextDose.quantity} {props.nextDose.doseUnit} · {props.nextDose.instruction}</p>
-          <button onClick={() => props.setSelectedDose(props.nextDose!.id)}>Abrir registro <span>→</span></button>
+          <button className="button-with-icon" onClick={() => props.setSelectedDose(props.nextDose!.id)}>Abrir registro <ArrowRight aria-hidden="true" /></button>
         </article>
       )}
 
       {schedule.conflicts.length > 0 && (
         <details className="conflict-panel" open={schedule.status === "requires_review"}>
-          <summary><span>!</span><div><strong>{schedule.conflicts.length} ponto(s) para revisar</strong><small>O cronograma não assumiu limites ausentes.</small></div></summary>
+          <summary><span><CircleAlert aria-hidden="true" /></span><div><strong>{schedule.conflicts.length} ponto(s) para revisar</strong><small>O cronograma não assumiu limites ausentes.</small></div></summary>
           <ul>{schedule.conflicts.map((item) => <li key={`${item.code}-${item.doseIds.join("-")}`}><strong>{item.severity === "blocking" ? "Revisão necessária" : "Atenção"}</strong>{item.message}</li>)}</ul>
         </details>
       )}
@@ -401,7 +425,7 @@ function TodayView(props: TodayProps) {
             <time>{group.minute === null ? "—" : formatClock(group.minute)}</time>
             <span className={`timeline-dot ${group.items.some((item) => item.type === "dose" && item.dose.status.startsWith("taken_")) ? "done" : ""}`} />
             <div className="timeline-content">
-              {group.items.map((item) => item.type === "meal" ? <div className="meal-item" key={item.id}><span aria-hidden="true">◌</span><strong>{item.label}</strong></div> : (
+              {group.items.map((item) => item.type === "meal" ? <div className="meal-item" key={item.id}><Utensils aria-hidden="true" /><strong>{item.label}</strong></div> : (
                 <button className={`dose-item ${item.dose.status}`} key={item.dose.id} onClick={() => props.setSelectedDose(item.dose.id)}>
                   <span><strong>{item.dose.medicationName}</strong><small>{item.dose.quantity} {item.dose.doseUnit}</small></span><em>{doseStateLabel(item.dose.status)}</em>
                 </button>
@@ -448,11 +472,11 @@ function DoseSheet({ dose, close, take, skip, snooze }: { dose: DoseRecord; clos
   return (
     <div className="sheet-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && close()}>
       <section className="dose-sheet" role="dialog" aria-modal="true" aria-labelledby="dose-title">
-        <button className="sheet-close" onClick={close} aria-label="Fechar">×</button>
+        <button className="sheet-close" onClick={close} aria-label="Fechar"><X aria-hidden="true" /></button>
         <p className="eyebrow">{dose.scheduledMinute === null ? "Horário a revisar" : `Planejado para ${formatClock(dose.scheduledMinute)}`}</p>
         <h2 id="dose-title">{dose.medicationName}</h2>
         <p className="dose-quantity">{dose.quantity} {dose.doseUnit}</p>
-        <div className="instruction-box"><span>i</span><p>{dose.instruction}</p></div>
+        <div className="instruction-box"><span><Info aria-hidden="true" /></span><p>{dose.instruction}</p></div>
         {alreadyRecorded ? <p className="recorded-state">{doseStateLabel(dose.status)}{dose.takenMinute !== null ? ` às ${formatClock(dose.takenMinute)}` : ""}.</p> : (
           <div className="dose-actions">
             <button className="primary-button large" onClick={() => take(dose, nowInSaoPaulo().time)}>Tomei agora <small>{nowInSaoPaulo().time}</small></button>
@@ -469,8 +493,8 @@ function DoseSheet({ dose, close, take, skip, snooze }: { dose: DoseRecord; clos
 function HistoryView({ history, exportData }: { history: DailySchedule[]; exportData: () => void }) {
   return (
     <section className="section-view">
-      <div className="section-heading"><div><p className="eyebrow">Registro permanente</p><h1>Histórico</h1><p>Horários planejados e reais, sem apagar eventos anteriores.</p></div><button className="secondary-button" onClick={exportData}>Exportar JSON</button></div>
-      {history.length === 0 ? <div className="empty-state"><span>▦</span><h2>Nenhum dia registrado</h2><p>Seu histórico aparecerá depois do primeiro check-in.</p></div> : (
+      <div className="section-heading"><div><p className="eyebrow">Registro permanente</p><h1>Histórico</h1><p>Horários planejados e reais, sem apagar eventos anteriores.</p></div><button className="secondary-button button-with-icon" onClick={exportData}><Download aria-hidden="true" /> Exportar JSON</button></div>
+      {history.length === 0 ? <div className="empty-state"><History aria-hidden="true" /><h2>Nenhum dia registrado</h2><p>Seu histórico aparecerá depois do primeiro check-in.</p></div> : (
         <div className="history-list">{history.map((day) => {
           const taken = day.doses.filter((dose) => dose.status.startsWith("taken_")).length;
           return <article key={day.date}><div className="history-date"><strong>{new Intl.DateTimeFormat("pt-BR", { timeZone: "UTC", day: "2-digit" }).format(new Date(`${day.date}T12:00:00Z`))}</strong><span>{new Intl.DateTimeFormat("pt-BR", { timeZone: "UTC", month: "short" }).format(new Date(`${day.date}T12:00:00Z`))}</span></div><div><h2>{phaseLabel(day.date)}</h2><p>Acordou às {formatClock(day.wakeMinute)} · {taken} de {day.doses.length} tomadas</p></div><span className={`history-status ${day.conflicts.length ? "review" : "ok"}`}>{day.conflicts.length ? `${day.conflicts.length} alerta(s)` : "Sem conflitos"}</span></article>;
@@ -507,10 +531,41 @@ function SettingsView({ preferences, save, demoMode }: { preferences: Preference
     <section className="section-view settings-view">
       <div className="section-heading"><div><p className="eyebrow">Rotina e dispositivo</p><h1>Ajustes</h1><p>Alterações valem para cronogramas futuros.</p></div></div>
       <form onSubmit={(event) => { event.preventDefault(); void save(draft); }}>
-        <div className="settings-card"><h2>Sua rotina</h2><label>Nome<input value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} /></label><label>Hora provável de dormir<input type="time" value={draft.usualBedtime} onChange={(event) => setDraft({ ...draft, usualBedtime: event.target.value })} /></label><fieldset><legend>Janela do café da manhã</legend><input aria-label="Início da janela do café" type="time" value={draft.breakfastStart} onChange={(event) => setDraft({ ...draft, breakfastStart: event.target.value })} /><span>até</span><input aria-label="Fim da janela do café" type="time" value={draft.breakfastEnd} onChange={(event) => setDraft({ ...draft, breakfastEnd: event.target.value })} /></fieldset><fieldset><legend>Janela do jantar</legend><input aria-label="Início da janela do jantar" type="time" value={draft.dinnerStart} onChange={(event) => setDraft({ ...draft, dinnerStart: event.target.value })} /><span>até</span><input aria-label="Fim da janela do jantar" type="time" value={draft.dinnerEnd} onChange={(event) => setDraft({ ...draft, dinnerEnd: event.target.value })} /></fieldset><button className="primary-button" type="submit">Salvar preferências</button></div>
+        <div className="settings-card">
+          <h2>Sua rotina</h2>
+          <label>Nome<input autoComplete="name" value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} /></label>
+          <label>Hora provável de dormir<input type="time" value={draft.usualBedtime} onChange={(event) => setDraft({ ...draft, usualBedtime: event.target.value })} /></label>
+          <TimeWindow
+            label="Janela do café da manhã"
+            start={draft.breakfastStart}
+            end={draft.breakfastEnd}
+            onStartChange={(breakfastStart) => setDraft({ ...draft, breakfastStart })}
+            onEndChange={(breakfastEnd) => setDraft({ ...draft, breakfastEnd })}
+          />
+          <TimeWindow
+            label="Janela do jantar"
+            start={draft.dinnerStart}
+            end={draft.dinnerEnd}
+            onStartChange={(dinnerStart) => setDraft({ ...draft, dinnerStart })}
+            onEndChange={(dinnerEnd) => setDraft({ ...draft, dinnerEnd })}
+          />
+          <button className="primary-button button-with-icon settings-save" type="submit"><Save aria-hidden="true" /> Salvar preferências</button>
+        </div>
       </form>
       <PushSetup demoMode={demoMode} />
-      <div className="settings-card"><h2>Conta e dados</h2><p>{demoMode ? "Modo demonstração: os dados ficam apenas neste aparelho." : "Conta conectada ao Supabase com políticas de acesso por usuário."}</p>{!demoMode && <div className="button-row"><button className="secondary-button" onClick={async () => { const { createBrowserSupabaseClient } = await import("@/lib/supabase/client"); await createBrowserSupabaseClient().auth.signOut(); router.push("/login"); router.refresh(); }}>Sair da conta</button><button className="secondary-button danger-text" onClick={async () => { if (!window.confirm("Apagar permanentemente sua conta e todo o histórico? Esta ação não pode ser desfeita.")) return; const response = await fetch("/api/account", { method: "DELETE" }); if (response.ok) { router.push("/login"); router.refresh(); } }}>Apagar conta</button></div>}</div>
+      <div className="settings-card"><h2>Conta e dados</h2><p>{demoMode ? "Modo demonstração: os dados ficam apenas neste aparelho." : "Conta conectada ao Supabase com políticas de acesso por usuário."}</p>{!demoMode && <div className="button-row"><button className="secondary-button button-with-icon" onClick={async () => { const { createBrowserSupabaseClient } = await import("@/lib/supabase/client"); await createBrowserSupabaseClient().auth.signOut(); router.push("/login"); router.refresh(); }}><LogOut aria-hidden="true" /> Sair da conta</button><button className="secondary-button button-with-icon danger-text" onClick={async () => { if (!window.confirm("Apagar permanentemente sua conta e todo o histórico? Esta ação não pode ser desfeita.")) return; const response = await fetch("/api/account", { method: "DELETE" }); if (response.ok) { router.push("/login"); router.refresh(); } }}><Trash2 aria-hidden="true" /> Apagar conta</button></div>}</div>
     </section>
+  );
+}
+
+function TimeWindow({ label, start, end, onStartChange, onEndChange }: { label: string; start: string; end: string; onStartChange: (value: string) => void; onEndChange: (value: string) => void }) {
+  return (
+    <fieldset className="time-window">
+      <legend>{label}</legend>
+      <div className="time-window-grid">
+        <label><span>De</span><input aria-label={`${label}: início`} type="time" value={start} onChange={(event) => onStartChange(event.target.value)} /></label>
+        <label><span>Até</span><input aria-label={`${label}: fim`} type="time" value={end} onChange={(event) => onEndChange(event.target.value)} /></label>
+      </div>
+    </fieldset>
   );
 }
