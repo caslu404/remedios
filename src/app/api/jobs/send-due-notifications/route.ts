@@ -1,5 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
+import { nextDailyReminderIso } from "@/lib/push/day-start";
 import { webPushClient } from "@/lib/push/web-push";
 
 export const dynamic = "force-dynamic";
@@ -12,7 +13,7 @@ export async function GET(request: Request) {
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !serviceKey) return NextResponse.json({ error: "Backend não configurado." }, { status: 503 });
   const admin = createClient(url, serviceKey, { auth: { persistSession: false, autoRefreshToken: false } });
-  const { data: jobs, error } = await admin.from("notification_jobs").select("id,user_id,payload_json,attempt_count").eq("status", "queued").lte("send_at", new Date().toISOString()).order("send_at").limit(50);
+  const { data: jobs, error } = await admin.from("notification_jobs").select("id,user_id,type,payload_json,attempt_count,send_at").eq("status", "queued").lte("send_at", new Date().toISOString()).order("send_at").limit(50);
   if (error) return NextResponse.json({ error: "Falha ao buscar fila." }, { status: 500 });
   let sent = 0;
   let failed = 0;
@@ -37,6 +38,15 @@ export async function GET(request: Request) {
       }
     }
     await admin.from("notification_jobs").update(delivered ? { status: "sent", sent_at: new Date().toISOString(), last_error: null } : { status: "failed", last_error: "delivery_failed" }).eq("id", job.id);
+    const payload = job.payload_json as { recurrence?: { time?: string; timeZone?: string } };
+    if (job.type === "day_start" && payload.recurrence?.time && /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(payload.recurrence.time)) {
+      const timeZone = payload.recurrence.timeZone || "America/Sao_Paulo";
+      const nextAt = nextDailyReminderIso(payload.recurrence.time, timeZone, new Date(Date.now() + 60_000));
+      const { data: existing } = await admin.from("notification_jobs").select("id").eq("user_id", job.user_id).eq("type", "day_start").eq("status", "queued").eq("send_at", nextAt).maybeSingle();
+      if (!existing) {
+        await admin.from("notification_jobs").insert({ user_id: job.user_id, scheduled_dose_id: null, send_at: nextAt, type: "day_start", payload_json: job.payload_json });
+      }
+    }
     if (delivered) sent += 1; else failed += 1;
   }
   return NextResponse.json({ processed: (jobs ?? []).length, sent, failed, precision: "worker_every_minute_best_effort" });

@@ -1,12 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   ArrowRight,
+  BellRing,
   CircleAlert,
   Cloud,
   CloudOff,
+  Clock3,
   Download,
   History,
   House,
@@ -53,6 +55,8 @@ interface Preferences {
   breakfastEnd: string;
   dinnerStart: string;
   dinnerEnd: string;
+  wakePromptEnabled: boolean;
+  wakePromptTime: string;
 }
 
 const DEFAULT_PREFERENCES: Preferences = {
@@ -63,7 +67,11 @@ const DEFAULT_PREFERENCES: Preferences = {
   breakfastEnd: "08:30",
   dinnerStart: "18:30",
   dinnerEnd: "20:30",
+  wakePromptEnabled: true,
+  wakePromptTime: "06:00",
 };
+
+const TREATMENT_START = INITIAL_TREATMENT_PHASES.map((phase) => phase.startDate).sort()[0]!;
 
 function nowInSaoPaulo(): { date: string; time: string } {
   const parts = new Intl.DateTimeFormat("en-CA", {
@@ -113,6 +121,7 @@ function doseStateLabel(status: DoseRecord["status"]): string {
 }
 
 export function TreatmentApp({ demoMode }: { demoMode: boolean }) {
+  const searchParams = useSearchParams();
   const [preferences, setPreferences] = useState(DEFAULT_PREFERENCES);
   const [schedule, setSchedule] = useState<DailySchedule | null>(null);
   const [history, setHistory] = useState<DailySchedule[]>([]);
@@ -124,6 +133,8 @@ export function TreatmentApp({ demoMode }: { demoMode: boolean }) {
   const [selectedDose, setSelectedDose] = useState<string | null>(null);
   const [clockTick, setClockTick] = useState(0);
   const today = nowInSaoPaulo().date;
+  const linkedDose = searchParams.get("dose");
+  const linkedTime = searchParams.get("at");
 
   const reloadHistory = useCallback(async () => {
     const rows = await getAllSchedules();
@@ -133,13 +144,17 @@ export function TreatmentApp({ demoMode }: { demoMode: boolean }) {
   useEffect(() => {
     async function boot() {
       const storedPreferences = await getPreference<Preferences>("preferences");
-      if (storedPreferences) setPreferences(storedPreferences);
+      const effectivePreferences = { ...DEFAULT_PREFERENCES, ...storedPreferences };
+      setPreferences(effectivePreferences);
       let localSchedule = (await getSchedule(today)) ?? null;
       setSchedule(localSchedule);
       await reloadHistory();
       setOnline(navigator.onLine);
       if (!demoMode && navigator.onLine) {
         await flushOfflineEvents();
+        if ("Notification" in window && Notification.permission === "granted") {
+          await fetch("/api/push/day-start", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ enabled: effectivePreferences.wakePromptEnabled, time: effectivePreferences.wakePromptTime }) });
+        }
         const [todayResponse, historyResponse] = await Promise.all([fetch("/api/schedules/today"), fetch("/api/history?limit=90")]);
         if (todayResponse.ok) {
           const remote = await todayResponse.json() as { schedule: DailySchedule | null };
@@ -159,6 +174,24 @@ export function TreatmentApp({ demoMode }: { demoMode: boolean }) {
     }
     void boot();
   }, [demoMode, reloadHistory, today]);
+
+  useEffect(() => {
+    if (!schedule) return;
+    if (linkedDose && schedule.doses.some((dose) => dose.id === linkedDose)) {
+      const frame = window.requestAnimationFrame(() => {
+        setTab("today");
+        setSelectedDose(linkedDose);
+      });
+      return () => window.cancelAnimationFrame(frame);
+    }
+    if (linkedTime) {
+      const frame = window.requestAnimationFrame(() => {
+        setTab("today");
+        document.querySelector(`[data-timeline-time="${linkedTime}"]`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+      });
+      return () => window.cancelAnimationFrame(frame);
+    }
+  }, [linkedDose, linkedTime, schedule]);
 
   useEffect(() => {
     const interval = window.setInterval(() => setClockTick(Date.now()), 30_000);
@@ -254,6 +287,9 @@ export function TreatmentApp({ demoMode }: { demoMode: boolean }) {
   async function savePreferences(updated: Preferences) {
     setPreferences(updated);
     await setPreference("preferences", updated);
+    if (!demoMode && navigator.onLine && "Notification" in window && Notification.permission === "granted") {
+      await fetch("/api/push/day-start", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ enabled: updated.wakePromptEnabled, time: updated.wakePromptTime }) });
+    }
     setNotice("Preferências salvas. O cronograma atual não foi alterado.");
   }
 
@@ -283,6 +319,25 @@ export function TreatmentApp({ demoMode }: { demoMode: boolean }) {
       ?? schedule.doses.find((dose) => ["planned", "notified", "snoozed", "requires_review"].includes(dose.status))
       ?? null;
   }, [schedule, clockTick]);
+
+  const nextBlock = useMemo(() => {
+    if (!schedule || !nextDose) return [];
+    if (nextDose.scheduledMinute === null) return [nextDose];
+    return schedule.doses.filter((dose) => dose.scheduledMinute === nextDose.scheduledMinute && ["planned", "notified", "snoozed", "requires_review"].includes(dose.status));
+  }, [nextDose, schedule]);
+
+  const previewSchedule = useMemo(() => {
+    if (today >= TREATMENT_START) return null;
+    return generateDailySchedule({
+      date: TREATMENT_START,
+      timezone: "America/Sao_Paulo",
+      wakeTime: preferences.wakePromptTime,
+      plannedBedtime: preferences.usualBedtime,
+      breakfastWindow: { start: preferences.breakfastStart, end: preferences.breakfastEnd },
+      dinnerWindow: { start: preferences.dinnerStart, end: preferences.dinnerEnd },
+      phases: INITIAL_TREATMENT_PHASES,
+    });
+  }, [preferences, today]);
 
   if (loading) {
     return <main className="app-loading"><BrandMark /><p>Preparando seu dia…</p></main>;
@@ -325,11 +380,15 @@ export function TreatmentApp({ demoMode }: { demoMode: boolean }) {
             name={preferences.name}
             date={today}
             schedule={schedule}
+            previewSchedule={previewSchedule}
+            wakePromptEnabled={preferences.wakePromptEnabled}
+            wakePromptTime={preferences.wakePromptTime}
             manualWake={manualWake}
             setManualWake={setManualWake}
             startDay={startDay}
             confirmDay={confirmDay}
             nextDose={nextDose}
+            nextBlock={nextBlock}
             selectedDose={selectedDose}
             setSelectedDose={setSelectedDose}
             takeDose={takeDose}
@@ -361,11 +420,15 @@ interface TodayProps {
   name: string;
   date: string;
   schedule: DailySchedule | null;
+  previewSchedule: DailySchedule | null;
+  wakePromptEnabled: boolean;
+  wakePromptTime: string;
   manualWake: string;
   setManualWake: (value: string) => void;
   startDay: (time: string) => void;
   confirmDay: () => void;
   nextDose: DoseRecord | null;
+  nextBlock: DoseRecord[];
   selectedDose: string | null;
   setSelectedDose: (id: string | null) => void;
   takeDose: (dose: DoseRecord, time: string) => void;
@@ -375,6 +438,28 @@ interface TodayProps {
 }
 
 function TodayView(props: TodayProps) {
+  if (props.date < TREATMENT_START && props.previewSchedule) {
+    const groups = groupTimeline(props.previewSchedule).filter((group) => group.items.some((item) => item.type === "dose"));
+    return (
+      <section className="pre-treatment-view">
+        <p className="eyebrow">Preparação para amanhã</p>
+        <h1>Seu tratamento começa em 06/08.</h1>
+        <p className="lead">Hoje não existe nenhuma dose prescrita, por isso o cronograma anterior mostrou “0 de 0”. Abaixo está uma prévia usando despertar às {props.wakePromptTime}; ela não agenda nem registra doses.</p>
+        {props.wakePromptEnabled && <div className="morning-reminder-note"><BellRing aria-hidden="true" /><span><strong>Lembrete diário às {props.wakePromptTime}</strong><small>Ao tocar, o app abre o check-in “Acordei agora”.</small></span></div>}
+        <div className="preview-heading"><h2>Prévia do primeiro dia</h2><span>Os horários serão recalculados após você informar que acordou.</span></div>
+        <div className="preview-schedule">
+          {groups.map((group) => (
+            <article key={group.key}>
+              <time>{group.minute === null ? "Revisar" : formatClock(group.minute)}</time>
+              <div>{group.items.map((item) => item.type === "meal" ? <span key={item.id}><Utensils aria-hidden="true" /> {item.label}</span> : <span key={item.dose.id}><strong>{item.dose.medicationName}</strong><small>{item.dose.quantity} {item.dose.doseUnit}</small></span>)}</div>
+            </article>
+          ))}
+        </div>
+        <p className="safety-line"><ShieldCheck aria-hidden="true" /> Prévia organizacional; tolerâncias não confirmadas continuam bloqueadas.</p>
+      </section>
+    );
+  }
+
   if (!props.schedule) {
     return (
       <section className="wake-view">
@@ -404,10 +489,8 @@ function TodayView(props: TodayProps) {
 
       {props.nextDose && (
         <article className="next-card">
-          <div className="next-label"><span>Próxima ação</span><b>{props.nextDose.scheduledMinute === null ? "Revisar" : formatClock(props.nextDose.scheduledMinute)}</b></div>
-          <h2>{props.nextDose.medicationName}</h2>
-          <p>{props.nextDose.quantity} {props.nextDose.doseUnit} · {props.nextDose.instruction}</p>
-          <button className="button-with-icon" onClick={() => props.setSelectedDose(props.nextDose!.id)}>Abrir registro <ArrowRight aria-hidden="true" /></button>
+          <div className="next-label"><span>Próxima ação</span><b>{props.nextDose.scheduledMinute === null ? "Revisar" : nextDoseTimeLabel(props.nextDose.scheduledMinute)}</b></div>
+          {props.nextBlock.length > 1 ? <><h2>{props.nextBlock.length} medicamentos neste horário</h2><p>Abra cada item e registre separadamente o que você tomou.</p><div className="next-dose-list">{props.nextBlock.map((dose) => <button key={dose.id} onClick={() => props.setSelectedDose(dose.id)}><span><strong>{dose.medicationName}</strong><small>{dose.quantity} {dose.doseUnit}</small></span><ArrowRight aria-hidden="true" /></button>)}</div></> : <><h2>{props.nextDose.medicationName}</h2><p>{props.nextDose.quantity} {props.nextDose.doseUnit} · {props.nextDose.instruction}</p><button className="button-with-icon" onClick={() => props.setSelectedDose(props.nextDose!.id)}>Abrir registro <ArrowRight aria-hidden="true" /></button></>}
         </article>
       )}
 
@@ -419,13 +502,14 @@ function TodayView(props: TodayProps) {
       )}
 
       <div className="timeline-heading"><h2>Linha do tempo</h2><span>Horário local · 24 h</span></div>
+      <p className="timeline-help">Toque em cada medicamento para marcar “Tomei agora”, informar outro horário, adiar ou registrar que não tomou.</p>
       <div className="timeline">
         {grouped.map((group) => (
-          <div className="timeline-row" key={group.key}>
+          <div className="timeline-row" key={group.key} data-timeline-time={group.minute === null ? "review" : formatClock(group.minute)}>
             <time>{group.minute === null ? "—" : formatClock(group.minute)}</time>
             <span className={`timeline-dot ${group.items.some((item) => item.type === "dose" && item.dose.status.startsWith("taken_")) ? "done" : ""}`} />
             <div className="timeline-content">
-              {group.items.map((item) => item.type === "meal" ? <div className="meal-item" key={item.id}><Utensils aria-hidden="true" /><strong>{item.label}</strong></div> : (
+              {group.items.map((item) => item.type === "meal" ? <details className="meal-item" key={item.id}><summary><Utensils aria-hidden="true" /><strong>{item.label}</strong><small>Entender este horário</small></summary><p>Esta refeição funciona como âncora do cronograma. Abra e registre separadamente cada medicamento mostrado neste mesmo horário.</p></details> : (
                 <button className={`dose-item ${item.dose.status}`} key={item.dose.id} onClick={() => props.setSelectedDose(item.dose.id)}>
                   <span><strong>{item.dose.medicationName}</strong><small>{item.dose.quantity} {item.dose.doseUnit}</small></span><em>{doseStateLabel(item.dose.status)}</em>
                 </button>
@@ -437,7 +521,7 @@ function TodayView(props: TodayProps) {
 
       {schedule.status !== "confirmed" && <div className="confirmation-bar"><button className="primary-button" onClick={props.confirmDay}>Confirmar meu dia</button><button className="secondary-button" onClick={props.adjust}>Ajustar refeições ou sono</button></div>}
 
-      {props.selectedDose && (
+      {props.selectedDose && schedule.doses.some((dose) => dose.id === props.selectedDose) && (
         <DoseSheet
           dose={schedule.doses.find((dose) => dose.id === props.selectedDose)!}
           close={() => props.setSelectedDose(null)}
@@ -448,6 +532,14 @@ function TodayView(props: TodayProps) {
       )}
     </section>
   );
+}
+
+function nextDoseTimeLabel(scheduledMinute: number): string {
+  const [hour, minute] = nowInSaoPaulo().time.split(":").map(Number);
+  const difference = scheduledMinute - (hour! * 60 + minute!);
+  if (difference === 0) return "Agora";
+  if (difference > 0 && difference < 60) return `Em ${difference} min`;
+  return formatClock(scheduledMinute);
 }
 
 type TimelineItem = { type: "dose"; dose: DoseRecord } | { type: "meal"; id: string; label: string };
@@ -497,7 +589,7 @@ function HistoryView({ history, exportData }: { history: DailySchedule[]; export
       {history.length === 0 ? <div className="empty-state"><History aria-hidden="true" /><h2>Nenhum dia registrado</h2><p>Seu histórico aparecerá depois do primeiro check-in.</p></div> : (
         <div className="history-list">{history.map((day) => {
           const taken = day.doses.filter((dose) => dose.status.startsWith("taken_")).length;
-          return <article key={day.date}><div className="history-date"><strong>{new Intl.DateTimeFormat("pt-BR", { timeZone: "UTC", day: "2-digit" }).format(new Date(`${day.date}T12:00:00Z`))}</strong><span>{new Intl.DateTimeFormat("pt-BR", { timeZone: "UTC", month: "short" }).format(new Date(`${day.date}T12:00:00Z`))}</span></div><div><h2>{phaseLabel(day.date)}</h2><p>Acordou às {formatClock(day.wakeMinute)} · {taken} de {day.doses.length} tomadas</p></div><span className={`history-status ${day.conflicts.length ? "review" : "ok"}`}>{day.conflicts.length ? `${day.conflicts.length} alerta(s)` : "Sem conflitos"}</span></article>;
+          return <details className="history-item" key={`${day.date}-${day.version}`}><summary><div className="history-date"><strong>{new Intl.DateTimeFormat("pt-BR", { timeZone: "UTC", day: "2-digit" }).format(new Date(`${day.date}T12:00:00Z`))}</strong><span>{new Intl.DateTimeFormat("pt-BR", { timeZone: "UTC", month: "short" }).format(new Date(`${day.date}T12:00:00Z`))}</span></div><div><h2>{phaseLabel(day.date)}</h2><p>Acordou às {formatClock(day.wakeMinute)} · {day.doses.length ? `${taken} de ${day.doses.length} tomadas` : "nenhuma dose prevista"}</p></div><span className={`history-status ${day.conflicts.length ? "review" : "ok"}`}>{day.conflicts.length ? `${day.conflicts.length} alerta(s)` : "Ver detalhes"}</span></summary><div className="history-detail">{day.doses.length === 0 ? <p>O tratamento ainda não havia começado nesta data.</p> : day.doses.map((dose) => <div key={dose.id}><time>{dose.scheduledMinute === null ? "Revisar" : formatClock(dose.scheduledMinute)}</time><span><strong>{dose.medicationName}</strong><small>{dose.takenMinute === null ? doseStateLabel(dose.status) : `${doseStateLabel(dose.status)} às ${formatClock(dose.takenMinute)}`}</small></span></div>)}</div></details>;
         })}</div>
       )}
     </section>
@@ -507,16 +599,16 @@ function HistoryView({ history, exportData }: { history: DailySchedule[]; export
 function RulesView() {
   return (
     <section className="section-view">
-      <div className="section-heading"><div><p className="eyebrow">Transparência clínica</p><h1>Regras cadastradas</h1><p>Campos vazios não são completados pelo sistema.</p></div></div>
-      <div className="rules-warning"><strong>Modo conservador ativo</strong><p>Tolerâncias e políticas de atraso ainda aguardam validação profissional.</p></div>
+      <div className="section-heading"><div><p className="eyebrow">Transparência clínica</p><h1>Regras cadastradas</h1><p>O app usa os horários-alvo do tratamento, mas não inventa margens de segurança.</p></div></div>
+      <div className="rules-warning"><strong>O que ainda precisa ser confirmado</strong><p>“Não informado” significa que o PRD não trouxe um intervalo mínimo ou máximo seguro. Esses valores e a política para atrasos precisam vir do médico ou farmacêutico antes de qualquer reagendamento automático.</p></div>
       <div className="rules-list">{INITIAL_TREATMENT_PHASES.map((phase) => (
         <article key={phase.id}>
           <div><span className="rigidity">Rigidez {phase.rigidity === "high" ? "alta" : phase.rigidity}</span><h2>{phase.medicationName}</h2><p>{phase.phaseName} · {phase.dosesPerDay}× ao dia · {phase.doseQuantity} {phase.doseUnit}</p></div>
           <dl>
             <div><dt>Intervalo-alvo</dt><dd>{phase.interval.targetMinutes === null ? "Não definido" : `${phase.interval.targetMinutes / 60} h`}</dd></div>
-            <div><dt>Mínimo validado</dt><dd className={phase.interval.minimumMinutes === null ? "pending" : ""}>{phase.interval.minimumMinutes === null ? "Aguardando" : `${phase.interval.minimumMinutes} min`}</dd></div>
-            <div><dt>Máximo validado</dt><dd className={phase.interval.maximumMinutes === null ? "pending" : ""}>{phase.interval.maximumMinutes === null ? "Aguardando" : `${phase.interval.maximumMinutes} min`}</dd></div>
-            <div><dt>Reagendar atrasos</dt><dd className="pending">Não confirmado</dd></div>
+            <div><dt>Mínimo seguro</dt><dd className={phase.interval.minimumMinutes === null ? "pending" : ""}>{phase.interval.minimumMinutes === null ? "Não informado" : `${phase.interval.minimumMinutes} min`}</dd></div>
+            <div><dt>Máximo seguro</dt><dd className={phase.interval.maximumMinutes === null ? "pending" : ""}>{phase.interval.maximumMinutes === null ? "Não informado" : `${phase.interval.maximumMinutes} min`}</dd></div>
+            <div><dt>Após atraso</dt><dd className="pending">Não mover automaticamente</dd></div>
           </dl>
         </article>
       ))}</div>
@@ -534,7 +626,8 @@ function SettingsView({ preferences, save, demoMode }: { preferences: Preference
         <div className="settings-card">
           <h2>Sua rotina</h2>
           <label>Nome<input autoComplete="name" value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} /></label>
-          <label>Hora provável de dormir<input type="time" value={draft.usualBedtime} onChange={(event) => setDraft({ ...draft, usualBedtime: event.target.value })} /></label>
+          <label>Hora provável de dormir<TimeControl label="Hora provável de dormir" value={draft.usualBedtime} onChange={(usualBedtime) => setDraft({ ...draft, usualBedtime })} /></label>
+          <p className="settings-help">As janelas são preferências para organizar café e jantar. Elas não registram a refeição nem autorizam mudar uma regra médica. Se uma janela conflitar com Nexium, NAC ou outro horário-alvo, o app mostra um alerta.</p>
           <TimeWindow
             label="Janela do café da manhã"
             start={draft.breakfastStart}
@@ -549,10 +642,14 @@ function SettingsView({ preferences, save, demoMode }: { preferences: Preference
             onStartChange={(dinnerStart) => setDraft({ ...draft, dinnerStart })}
             onEndChange={(dinnerEnd) => setDraft({ ...draft, dinnerEnd })}
           />
+          <div className="reminder-setting">
+            <div className="reminder-setting-row"><BellRing aria-hidden="true" /><span><strong>Lembrete para começar o dia</strong><small>Abre o check-in “Acordei agora”.</small></span><button className={`switch-control ${draft.wakePromptEnabled ? "enabled" : ""}`} type="button" role="switch" aria-checked={draft.wakePromptEnabled} onClick={() => setDraft({ ...draft, wakePromptEnabled: !draft.wakePromptEnabled })}><span /></button></div>
+            {draft.wakePromptEnabled && <label>Horário do “Bom dia”<TimeControl label="Horário do lembrete para começar o dia" value={draft.wakePromptTime} onChange={(wakePromptTime) => setDraft({ ...draft, wakePromptTime })} /></label>}
+          </div>
           <button className="primary-button button-with-icon settings-save" type="submit"><Save aria-hidden="true" /> Salvar preferências</button>
         </div>
       </form>
-      <PushSetup demoMode={demoMode} />
+      <PushSetup demoMode={demoMode} wakePromptEnabled={preferences.wakePromptEnabled} wakePromptTime={preferences.wakePromptTime} />
       <div className="settings-card"><h2>Conta e dados</h2><p>{demoMode ? "Modo demonstração: os dados ficam apenas neste aparelho." : "Conta conectada ao Supabase com políticas de acesso por usuário."}</p>{!demoMode && <div className="button-row"><button className="secondary-button button-with-icon" onClick={async () => { const { createBrowserSupabaseClient } = await import("@/lib/supabase/client"); await createBrowserSupabaseClient().auth.signOut(); router.push("/login"); router.refresh(); }}><LogOut aria-hidden="true" /> Sair da conta</button><button className="secondary-button button-with-icon danger-text" onClick={async () => { if (!window.confirm("Apagar permanentemente sua conta e todo o histórico? Esta ação não pode ser desfeita.")) return; const response = await fetch("/api/account", { method: "DELETE" }); if (response.ok) { router.push("/login"); router.refresh(); } }}><Trash2 aria-hidden="true" /> Apagar conta</button></div>}</div>
     </section>
   );
@@ -563,9 +660,13 @@ function TimeWindow({ label, start, end, onStartChange, onEndChange }: { label: 
     <fieldset className="time-window">
       <legend>{label}</legend>
       <div className="time-window-grid">
-        <label><span>De</span><input aria-label={`${label}: início`} type="time" value={start} onChange={(event) => onStartChange(event.target.value)} /></label>
-        <label><span>Até</span><input aria-label={`${label}: fim`} type="time" value={end} onChange={(event) => onEndChange(event.target.value)} /></label>
+        <label><span>De</span><TimeControl label={`${label}: início`} value={start} onChange={onStartChange} /></label>
+        <label><span>Até</span><TimeControl label={`${label}: fim`} value={end} onChange={onEndChange} /></label>
       </div>
     </fieldset>
   );
+}
+
+function TimeControl({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
+  return <span className="time-control"><Clock3 aria-hidden="true" /><input aria-label={label} type="time" value={value} onChange={(event) => onChange(event.target.value)} /></span>;
 }
