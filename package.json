@@ -1,6 +1,37 @@
 {
-  "name": "tratamento-lucas-app",
-  "version": "1.0.0",
+  "name": "tratamento-adaptativo",
+  "version": "0.1.0",
   "private": true,
-  "scripts": {"check": "node --check /dev/stdin < index.html"}
+  "engines": {
+    "node": ">=20.9.0"
+  },
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@supabase/ssr": "^0.12.4",
+    "@supabase/supabase-js": "^2.112.1",
+    "idb": "^8.0.3",
+    "next": "^16.3.0",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "web-push": "^3.6.7",
+    "zod": "^4.1.12"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.0",
+    "@types/react": "^19.2.2",
+    "@types/react-dom": "^19.2.2",
+    "@types/web-push": "^3.6.4",
+    "eslint": "^9.39.1",
+    "eslint-config-next": "^16.3.0",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.8"
+  }
 }
