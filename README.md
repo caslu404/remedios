@@ -42,6 +42,7 @@ npm run build
 1. Crie um projeto Supabase.
 2. Execute, nessa ordem:
    - `supabase/migrations/202608050001_initial_schema.sql`
+   - `supabase/migrations/202608050002_notification_cron.sql`
    - `supabase/seed.sql`
 3. Em Authentication, habilite e-mail por magic link e cadastre as URLs local e de produção.
 4. Copie a URL e a chave publicável para `.env.local`.
@@ -57,9 +58,46 @@ Gere as chaves:
 npx web-push generate-vapid-keys
 ```
 
-Configure `NEXT_PUBLIC_VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` e `CRON_SECRET`. No iPhone, o Web Push requer iOS 16.4 ou posterior e o app adicionado à Tela de Início.
+Configure `NEXT_PUBLIC_VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` e `CRON_SECRET` na Vercel. No iPhone, o Web Push requer iOS 16.4 ou posterior e o app adicionado à Tela de Início.
 
-O `vercel.json` chama o worker uma vez por minuto. Essa é uma fila **best effort**: atraso típico esperado de 0–2 minutos, sem garantia de entrega exata. O plano da Vercel precisa aceitar cron por minuto; caso contrário, use Supabase `pg_cron`, QStash ou Trigger.dev com a mesma rota protegida.
+O plano Vercel Hobby não aceita cron por minuto. Por isso, a migration instala Supabase Cron (`pg_cron` + `pg_net`) e fornece uma função administrativa para registrar o worker sem expor segredos.
+
+Depois do primeiro deploy, abra o SQL Editor do Supabase e execute uma vez, usando a URL pública final e o mesmo valor de `CRON_SECRET` configurado na Vercel:
+
+```sql
+select vault.create_secret(
+  'https://SEU-DOMINIO.vercel.app/api/jobs/send-due-notifications',
+  'notification_worker_url',
+  'URL do worker de Web Push'
+);
+
+select vault.create_secret(
+  'SUBSTITUA-PELO-MESMO-CRON_SECRET-DA-VERCEL',
+  'notification_cron_secret',
+  'Segredo compartilhado do worker de Web Push'
+);
+
+select private.configure_notification_cron();
+```
+
+Confirme que o job está ativo e acompanhe suas execuções:
+
+```sql
+select jobid, jobname, schedule, active
+from cron.job
+where jobname = 'send-due-notifications-every-minute';
+
+select status, return_message, start_time, end_time
+from cron.job_run_details
+where jobid = (
+  select jobid from cron.job
+  where jobname = 'send-due-notifications-every-minute'
+)
+order by start_time desc
+limit 20;
+```
+
+Essa continua sendo uma fila **best effort**: o scheduler consulta os jobs uma vez por minuto e o iOS decide quando apresenta o push. Como contingência, QStash também pode chamar a mesma rota com `Authorization: Bearer <CRON_SECRET>`, mas uma chamada por minuto excede o limite diário gratuito atual do serviço.
 
 ## Deploy na Vercel
 
@@ -94,8 +132,10 @@ Documentos: [arquitetura](docs/ARCHITECTURE.md), [API](docs/API.md), [testes](do
 
 - [Next.js — Progressive Web Apps](https://nextjs.org/docs/app/guides/progressive-web-apps)
 - [Supabase — Auth server-side](https://supabase.com/docs/guides/auth/server-side)
+- [Supabase — Cron](https://supabase.com/docs/guides/cron)
+- [Supabase — Vault](https://supabase.com/docs/guides/database/vault)
 - [Apple — Web Push](https://developer.apple.com/documentation/usernotifications/sending-web-push-notifications-in-web-apps-and-browsers)
-- [Vercel — Cron Jobs](https://vercel.com/docs/cron-jobs)
+- [Vercel — limites de Cron Jobs](https://vercel.com/docs/cron-jobs/usage-and-pricing)
 
 ## Aviso
 

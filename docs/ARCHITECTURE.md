@@ -10,7 +10,7 @@ iPhone PWA
        ├─ Supabase Auth (PKCE + cookies)
        ├─ Motor puro de cronograma
        ├─ PostgreSQL + RLS + trilha de eventos
-       └─ Fila de notificações → worker → Web Push
+       └─ Fila de notificações → Supabase Cron → worker → Web Push
 ```
 
 ## Separação do motor
@@ -44,4 +44,4 @@ A interface salva primeiro no IndexedDB. Eventos autenticados entram em uma fila
 
 ## Notificações
 
-Confirmar o dia cria pré-lembrete e lembrete principal. Snooze cria um novo job, mas não muda `scheduled_at`. O worker reivindica jobs antes de enviar e desativa subscriptions expiradas (HTTP 404/410).
+Confirmar o dia cria pré-lembrete e lembrete principal. Snooze cria um novo job, mas não muda `scheduled_at`. O Supabase Cron chama o worker protegido uma vez por minuto; o worker reivindica jobs antes de enviar e desativa subscriptions expiradas (HTTP 404/410). O agendador fica fora do `vercel.json` porque o plano Vercel Hobby não aceita frequências menores que um dia.
