@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { BellRing, Send, Smartphone } from "lucide-react";
 
 function base64ToUint8Array(base64: string): Uint8Array<ArrayBuffer> {
   const padding = "=".repeat((4 - (base64.length % 4)) % 4);
@@ -49,8 +50,8 @@ export function PushSetup({ demoMode }: { demoMode: boolean }) {
   return (
     <div className="settings-card">
       <div className="card-title-row"><div><h2>Lembretes</h2><p>Web Push no iPhone exige instalação na Tela de Início.</p></div><span className={`status-dot ${status === "granted" ? "enabled" : ""}`}>{status === "granted" ? "Ativos" : "Inativos"}</span></div>
-      {!standalone && <div className="install-tip"><strong>Instale primeiro no iPhone</strong><p>No Safari, toque em Compartilhar e depois em “Adicionar à Tela de Início”.</p></div>}
-      <div className="button-row"><button className="primary-button" type="button" onClick={enable}>Ativar lembretes</button>{status === "granted" && !demoMode && <button className="secondary-button" type="button" onClick={test}>Enviar teste</button>}</div>
+      {!standalone && <div className="install-tip"><Smartphone aria-hidden="true" /><div><strong>Instale primeiro no iPhone</strong><p>No Safari, toque em Compartilhar e depois em “Adicionar à Tela de Início”.</p></div></div>}
+      <div className="button-row"><button className="primary-button button-with-icon" type="button" onClick={enable}><BellRing aria-hidden="true" /> Ativar lembretes</button>{status === "granted" && !demoMode && <button className="secondary-button button-with-icon" type="button" onClick={test}><Send aria-hidden="true" /> Enviar teste</button>}</div>
       {message && <p className="form-message" role="status">{message}</p>}
     </div>
   );
