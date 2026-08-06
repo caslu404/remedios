@@ -28,6 +28,7 @@ describe("generateDailySchedule", () => {
     expect(schedule.date).toBe("2026-08-06");
     expect(schedule.doses).toHaveLength(11);
     expect(schedule.doses.filter((dose) => dose.scheduledAtLocal !== null).every((dose) => dose.scheduledAtLocal?.startsWith("2026-08-06T"))).toBe(true);
+    expect(schedule.doses.filter((dose) => dose.medicationId === "metronidazol").map((dose) => dose.scheduledMinute)).toEqual([390, 870, 1350]);
   });
 
   it.each(["05:30", "06:00", "06:30", "07:00", "07:45", "09:00", "11:00"])(
@@ -48,11 +49,11 @@ describe("generateDailySchedule", () => {
       "nexium-1": 380,
       "nac-1": 380,
       "rifaximina-1": 420,
-      "metronidazol-1": 420,
-      "metronidazol-2": 900,
+      "metronidazol-1": 380,
+      "metronidazol-2": 860,
       "nac-2": 1110,
       "rifaximina-2": 1140,
-      "metronidazol-3": 1380,
+      "metronidazol-3": 1340,
     });
     expect(INITIAL_TREATMENT_PHASES.find((phase) => phase.medicationId === "metronidazol")?.interval.minimumMinutes).toBeNull();
   });

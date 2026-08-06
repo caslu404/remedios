@@ -5,6 +5,7 @@ Nenhuma resposta abaixo deve ser escolhida por programação. Até haver fonte, 
 | Decisão | Estado no MVP | Comportamento conservador |
 |---|---|---|
 | Mínimo/máximo do metronidazol | Não confirmado | Mostra o intervalo-alvo de 8 h; não encurta nem alonga automaticamente. |
+| Âncora diária do metronidazol | Preferência organizacional informada pelo usuário | Usa o despertar como primeiro alvo e repete o alvo cadastrado de 8 h; isso não valida mínimo, máximo ou reagendamento por atraso. |
 | Mínimo/máximo da rifaximina | Não confirmado | Mostra o alvo de 12 h; não move doses por atraso. |
 | Atraso move doses futuras | Não confirmado | Registra `taken_at`, preserva os próximos horários e abre conflito. |
 | Limite máximo de atraso | Não confirmado | Não classifica como dose perdida automaticamente. |

@@ -34,6 +34,7 @@ import {
   type DoseRecord,
 } from "@/domain/scheduling";
 import {
+  deleteSchedule,
   flushOfflineEvents,
   getAllSchedules,
   getPreference,
@@ -136,6 +137,20 @@ function doseStateLabel(status: DoseRecord["status"]): string {
   return labels[status];
 }
 
+function usesLegacyMetronidazolAnchor(schedule: DailySchedule): boolean {
+  const firstDose = schedule.doses.find((dose) => dose.medicationId === "metronidazol" && dose.sequenceNumber === 1);
+  const breakfast = schedule.meals.find((meal) => meal.id === "breakfast");
+  return firstDose?.scheduledMinute !== null
+    && firstDose?.scheduledMinute !== undefined
+    && breakfast !== undefined
+    && firstDose.scheduledMinute === breakfast.scheduledMinute
+    && firstDose.scheduledMinute !== schedule.wakeMinute;
+}
+
+function hasCompletedDoseRecord(schedule: DailySchedule): boolean {
+  return schedule.doses.some((dose) => dose.takenMinute !== null || ["skipped", "missed", "cancelled_by_schedule_change"].includes(dose.status));
+}
+
 export function TreatmentApp({ demoMode }: { demoMode: boolean }) {
   const searchParams = useSearchParams();
   const [preferences, setPreferences] = useState(DEFAULT_PREFERENCES);
@@ -194,6 +209,17 @@ export function TreatmentApp({ demoMode }: { demoMode: boolean }) {
           } catch {
             setOnline(false);
             setNotice("A sincronização está temporariamente indisponível. Você pode iniciar e registrar o dia normalmente neste iPhone.");
+          }
+        }
+        if (localSchedule && usesLegacyMetronidazolAnchor(localSchedule)) {
+          if (hasCompletedDoseRecord(localSchedule)) {
+            setNotice("O novo alvo do metronidazol valerá nos próximos cronogramas. O dia atual foi preservado porque já contém registros.");
+          } else {
+            await deleteSchedule(today);
+            localSchedule = null;
+            setSchedule(null);
+            await reloadHistory();
+            setNotice("Atualizamos o alvo do metronidazol. Informe novamente o horário em que acordou para recriar o cronograma de hoje.");
           }
         }
       } catch {

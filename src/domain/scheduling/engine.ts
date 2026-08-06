@@ -166,8 +166,8 @@ export function generateDailySchedule(input: GenerateScheduleInput): DailySchedu
       }
     } else {
       for (let sequence = 1; sequence <= metronidazol.dosesPerDay; sequence += 1) {
-        const minute = breakfast + interval * (sequence - 1);
-        doses.push(makeDose(input.date, metronidazol, sequence, minute < 1440 ? minute : null, "Intervalo-alvo de 8 horas"));
+        const minute = wake + interval * (sequence - 1);
+        doses.push(makeDose(input.date, metronidazol, sequence, minute < 1440 ? minute : null, "Intervalo-alvo de 8 horas a partir do despertar"));
       }
     }
   }

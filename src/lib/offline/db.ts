@@ -45,6 +45,12 @@ export async function saveSchedule(schedule: DailySchedule): Promise<void> {
   else memorySchedules.set(schedule.date, schedule);
 }
 
+export async function deleteSchedule(date: string): Promise<void> {
+  const db = await dbPromise;
+  if (db) await db.delete("schedules", date);
+  else memorySchedules.delete(date);
+}
+
 export async function getSchedule(date: string): Promise<DailySchedule | undefined> {
   const db = await dbPromise;
   return db ? db.get("schedules", date) : memorySchedules.get(date);

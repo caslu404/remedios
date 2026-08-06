@@ -17,7 +17,8 @@ export async function createAndPersistSchedule(supabase: SupabaseClient, userId:
     timezone: input.timezone,
   }, { onConflict: "user_id,date" });
 
-  const { data: latest } = await supabase.from("daily_schedules").select("version").eq("user_id", userId).eq("date", input.date).order("version", { ascending: false }).limit(1).maybeSingle();
+  const { data: latest, error: latestError } = await supabase.from("daily_schedules").select("id,version").eq("user_id", userId).eq("date", input.date).order("version", { ascending: false }).limit(1).maybeSingle();
+  if (latestError) throw latestError;
   const version = (latest?.version ?? 0) + 1;
   schedule.version = version;
   const { data: row, error } = await supabase.from("daily_schedules").insert({
@@ -48,6 +49,15 @@ export async function createAndPersistSchedule(supabase: SupabaseClient, userId:
   if (inserts.some((item) => !item.medication_phase_id)) throw new Error("Fase persistida não encontrada.");
   const { error: doseError } = await supabase.from("scheduled_doses").insert(inserts);
   if (doseError) throw doseError;
+  if (latest?.id) {
+    const { data: previousDoses, error: previousDoseError } = await supabase.from("scheduled_doses").select("id").eq("daily_schedule_id", latest.id);
+    if (previousDoseError) throw previousDoseError;
+    const previousDoseIds = (previousDoses ?? []).map((dose) => dose.id);
+    if (previousDoseIds.length) {
+      const { error: cancellationError } = await supabase.from("notification_jobs").update({ status: "cancelled" }).in("scheduled_dose_id", previousDoseIds).eq("status", "queued");
+      if (cancellationError) throw cancellationError;
+    }
+  }
   await supabase.from("schedule_events").insert({ daily_schedule_id: row.id, client_event_id: clientEventId ?? null, event_type: "schedule_generated", payload_json: { reason: schedule.generationReason, conflicts: schedule.conflicts.map((item) => item.code) } });
   return { id: row.id as string, schedule };
 }
