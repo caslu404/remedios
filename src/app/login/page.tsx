@@ -18,10 +18,10 @@ export default async function LoginPage() {
       <section className="login-card">
         <BrandMark />
         <p className="eyebrow">Tratamento Adaptativo</p>
-        <h1>Entre sem senha</h1>
-        <p>Enviaremos um link seguro para o seu e-mail. Seus registros ficam vinculados à sua conta.</p>
+        <h1>Acesso deste iPhone</h1>
+        <p>O login protege seu histórico e suas notificações. Você recebe um link seguro e, na URL oficial, normalmente entra apenas uma vez neste aparelho.</p>
         <LoginForm />
-        <p className="privacy-note">Este app organiza horários e registros. Ele não altera sua prescrição nem substitui orientação profissional.</p>
+        <p className="privacy-note">Use sempre <strong>remedios-seven.vercel.app</strong>. Links de preview de branches são ambientes separados e podem pedir outro login.</p>
       </section>
     </main>
   );

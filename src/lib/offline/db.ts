@@ -62,15 +62,20 @@ export async function queueOfflineEvent(event: OfflineEvent): Promise<void> {
 }
 
 export async function flushOfflineEvents(): Promise<number> {
-  if (!navigator.onLine) return 0;
+  if (typeof navigator === "undefined" || !navigator.onLine) return 0;
   const db = await dbPromise;
   const events = db ? await db.getAll("syncQueue") : [...memoryQueue.values()];
   if (!events.length) return 0;
-  const response = await fetch("/api/offline/sync", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ events }),
-  });
+  let response: Response;
+  try {
+    response = await fetch("/api/offline/sync", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ events }),
+    });
+  } catch {
+    return 0;
+  }
   if (!response.ok) return 0;
   if (db) {
     const tx = db.transaction("syncQueue", "readwrite");

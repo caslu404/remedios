@@ -23,6 +23,13 @@ function input(overrides: Partial<GenerateScheduleInput> = {}): GenerateSchedule
 }
 
 describe("generateDailySchedule", () => {
+  it("monta o primeiro dia com a rotina padrão de 06:30 a 22:30", () => {
+    const schedule = generateDailySchedule(input({ wakeTime: "06:30", plannedBedtime: "22:30" }));
+    expect(schedule.date).toBe("2026-08-06");
+    expect(schedule.doses).toHaveLength(11);
+    expect(schedule.doses.filter((dose) => dose.scheduledAtLocal !== null).every((dose) => dose.scheduledAtLocal?.startsWith("2026-08-06T"))).toBe(true);
+  });
+
   it.each(["05:30", "06:00", "06:30", "07:00", "07:45", "09:00", "11:00"])(
     "gera todas as doses prescritas para despertar às %s sem duplicar",
     (wakeTime) => {

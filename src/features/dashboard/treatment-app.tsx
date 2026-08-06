@@ -48,6 +48,7 @@ import { PushSetup } from "@/features/notifications/push-setup";
 type Tab = "today" | "history" | "rules" | "settings";
 
 interface Preferences {
+  version: number;
   acceptedNotice: boolean;
   name: string;
   usualBedtime: string;
@@ -60,16 +61,31 @@ interface Preferences {
 }
 
 const DEFAULT_PREFERENCES: Preferences = {
+  version: 2,
   acceptedNotice: false,
   name: "Lucas",
-  usualBedtime: "23:30",
+  usualBedtime: "22:30",
   breakfastStart: "07:00",
   breakfastEnd: "08:30",
   dinnerStart: "18:30",
   dinnerEnd: "20:30",
   wakePromptEnabled: true,
-  wakePromptTime: "06:00",
+  wakePromptTime: "06:30",
 };
+
+function migratePreferences(stored?: Partial<Preferences>): Preferences {
+  if (!stored) return DEFAULT_PREFERENCES;
+  if ((stored.version ?? 1) < 2) {
+    return {
+      ...DEFAULT_PREFERENCES,
+      ...stored,
+      version: 2,
+      usualBedtime: "22:30",
+      wakePromptTime: "06:30",
+    };
+  }
+  return { ...DEFAULT_PREFERENCES, ...stored };
+}
 
 const TREATMENT_START = INITIAL_TREATMENT_PHASES.map((phase) => phase.startDate).sort()[0]!;
 
@@ -127,7 +143,7 @@ export function TreatmentApp({ demoMode }: { demoMode: boolean }) {
   const [history, setHistory] = useState<DailySchedule[]>([]);
   const [tab, setTab] = useState<Tab>("today");
   const [loading, setLoading] = useState(true);
-  const [manualWake, setManualWake] = useState(nowInSaoPaulo().time);
+  const [manualWake, setManualWake] = useState(DEFAULT_PREFERENCES.wakePromptTime);
   const [online, setOnline] = useState(true);
   const [notice, setNotice] = useState("");
   const [selectedDose, setSelectedDose] = useState<string | null>(null);
@@ -143,34 +159,48 @@ export function TreatmentApp({ demoMode }: { demoMode: boolean }) {
 
   useEffect(() => {
     async function boot() {
-      const storedPreferences = await getPreference<Preferences>("preferences");
-      const effectivePreferences = { ...DEFAULT_PREFERENCES, ...storedPreferences };
-      setPreferences(effectivePreferences);
-      let localSchedule = (await getSchedule(today)) ?? null;
-      setSchedule(localSchedule);
-      await reloadHistory();
-      setOnline(navigator.onLine);
-      if (!demoMode && navigator.onLine) {
-        await flushOfflineEvents();
-        if ("Notification" in window && Notification.permission === "granted") {
-          await fetch("/api/push/day-start", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ enabled: effectivePreferences.wakePromptEnabled, time: effectivePreferences.wakePromptTime }) });
+      try {
+        const storedPreferences = await getPreference<Partial<Preferences>>("preferences");
+        const effectivePreferences = migratePreferences(storedPreferences);
+        setPreferences(effectivePreferences);
+        setManualWake(effectivePreferences.wakePromptTime);
+        if (storedPreferences?.version !== effectivePreferences.version) {
+          await setPreference("preferences", effectivePreferences);
         }
-        const [todayResponse, historyResponse] = await Promise.all([fetch("/api/schedules/today"), fetch("/api/history?limit=90")]);
-        if (todayResponse.ok) {
-          const remote = await todayResponse.json() as { schedule: DailySchedule | null };
-          if (remote.schedule && (!localSchedule || remote.schedule.version >= localSchedule.version)) {
-            localSchedule = remote.schedule;
-            setSchedule(remote.schedule);
-            await saveSchedule(remote.schedule);
+        let localSchedule = (await getSchedule(today)) ?? null;
+        setSchedule(localSchedule);
+        await reloadHistory();
+        setOnline(navigator.onLine);
+        if (!demoMode && navigator.onLine) {
+          try {
+            await flushOfflineEvents();
+            if ("Notification" in window && Notification.permission === "granted") {
+              await fetch("/api/push/day-start", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ enabled: effectivePreferences.wakePromptEnabled, time: effectivePreferences.wakePromptTime }) });
+            }
+            const [todayResponse, historyResponse] = await Promise.all([fetch("/api/schedules/today"), fetch("/api/history?limit=90")]);
+            if (todayResponse.ok) {
+              const remote = await todayResponse.json() as { schedule: DailySchedule | null };
+              if (remote.schedule && (!localSchedule || remote.schedule.version >= localSchedule.version)) {
+                localSchedule = remote.schedule;
+                setSchedule(remote.schedule);
+                await saveSchedule(remote.schedule);
+              }
+            }
+            if (historyResponse.ok) {
+              const remote = await historyResponse.json() as { schedules: Array<{ snapshot_json: DailySchedule }> };
+              for (const item of [...remote.schedules].reverse()) await saveSchedule(item.snapshot_json);
+              await reloadHistory();
+            }
+          } catch {
+            setOnline(false);
+            setNotice("A sincronização está temporariamente indisponível. Você pode iniciar e registrar o dia normalmente neste iPhone.");
           }
         }
-        if (historyResponse.ok) {
-          const remote = await historyResponse.json() as { schedules: Array<{ snapshot_json: DailySchedule }> };
-          for (const item of [...remote.schedules].reverse()) await saveSchedule(item.snapshot_json);
-          await reloadHistory();
-        }
+      } catch {
+        setNotice("Não foi possível recuperar os dados salvos. Recarregue o app; nenhuma regra médica foi alterada.");
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     }
     void boot();
   }, [demoMode, reloadHistory, today]);
