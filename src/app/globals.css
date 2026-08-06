@@ -146,9 +146,6 @@ button:focus-visible, input:focus-visible, summary:focus-visible { outline: 3px 
 .toast { position: fixed; z-index: 60; top: calc(84px + env(safe-area-inset-top)); left: 50%; transform: translateX(-50%); width: min(calc(100% - 32px), 620px); display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 14px 16px 14px 20px; color: white; background: var(--forest-deep); border-radius: 16px; box-shadow: 0 18px 50px rgb(6 32 25 / 25%); font-size: 14px; font-weight: 700; }
 .toast button { width: 36px; height: 36px; display: grid; place-items: center; flex: 0 0 auto; border: 0; border-radius: 50%; color: white; background: rgb(255 255 255 / 12%); }
 .toast button svg { width: 19px; height: 19px; }
-.alcohol-warning { display: flex; align-items: center; gap: 10px; margin: 0 0 20px; padding: 11px 14px; color: #713c2e; background: #fff1eb; border: 1px solid #e8b8aa; border-radius: 14px; font-size: 12px; }
-.alcohol-warning strong { padding: 5px 8px; color: white; background: var(--danger); border-radius: 8px; text-transform: uppercase; letter-spacing: .06em; }
-
 .wake-view { width: min(100%, 760px); margin: 0 auto; text-align: center; }
 .wake-view h1, .day-heading h1, .section-heading h1 { margin: 12px 0; color: var(--forest-deep); font: 700 clamp(42px, 7vw, 72px)/1.02 Georgia, serif; letter-spacing: -.045em; }
 .wake-view h1 span { color: #64756d; font-weight: 400; }

@@ -430,7 +430,6 @@ export function TreatmentApp({ demoMode }: { demoMode: boolean }) {
 
       <main className="app-main">
         {notice && <div className="toast" role="status"><span>{notice}</span><button aria-label="Fechar aviso" onClick={() => setNotice("")}><X aria-hidden="true" /></button></div>}
-        {today >= "2026-08-06" && today <= "2026-08-22" && <div className="alcohol-warning"><strong>Sem álcool</strong><span>Durante o metronidazol e por pelo menos 3 dias após a última dose.</span></div>}
         {tab === "today" && (
           <TodayView
             name={preferences.name}
