@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import {
   ArrowRight,
   BellRing,
@@ -14,12 +14,10 @@ import {
   House,
   Info,
   ListChecks,
-  LogOut,
   Save,
   Settings,
   ShieldCheck,
   Sun,
-  Trash2,
   Utensils,
   X,
   type LucideIcon,
@@ -34,7 +32,6 @@ import {
   type DoseRecord,
 } from "@/domain/scheduling";
 import {
-  clearLocalData,
   deleteSchedule,
   flushOfflineEvents,
   getAllSchedules,
@@ -713,22 +710,6 @@ function RulesView() {
 
 function SettingsView({ preferences, save, demoMode }: { preferences: Preferences; save: (value: Preferences) => void; demoMode: boolean }) {
   const [draft, setDraft] = useState(preferences);
-  const router = useRouter();
-
-  async function deleteAccount() {
-    const confirmation = window.prompt("Esta ação apaga permanentemente a conta e o histórico. Para continuar, digite APAGAR CONTA.");
-    if (confirmation !== "APAGAR CONTA") return;
-    const response = await fetch("/api/account", {
-      method: "DELETE",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ confirmation }),
-    });
-    if (response.ok) {
-      await clearLocalData();
-      router.push("/login");
-      router.refresh();
-    }
-  }
 
   return (
     <section className="section-view settings-view">
@@ -761,7 +742,7 @@ function SettingsView({ preferences, save, demoMode }: { preferences: Preference
         </div>
       </form>
       <PushSetup demoMode={demoMode} wakePromptEnabled={preferences.wakePromptEnabled} wakePromptTime={preferences.wakePromptTime} />
-      <div className="settings-card"><h2>Conta e dados</h2><p>{demoMode ? "Modo demonstração: os dados ficam apenas neste aparelho." : "Conta conectada ao Supabase com políticas de acesso por usuário."}</p>{!demoMode && <div className="button-row"><button className="secondary-button button-with-icon" onClick={async () => { const { createBrowserSupabaseClient } = await import("@/lib/supabase/client"); await createBrowserSupabaseClient().auth.signOut(); router.push("/login"); router.refresh(); }}><LogOut aria-hidden="true" /> Sair da conta</button><button className="secondary-button button-with-icon danger-text" onClick={() => void deleteAccount()}><Trash2 aria-hidden="true" /> Apagar conta definitivamente</button></div>}</div>
+      <div className="settings-card"><h2>Dados deste iPhone</h2><p>{demoMode ? "Modo demonstração: os dados ficam apenas neste aparelho." : "O app abre sem e-mail e mantém uma sessão privada neste aparelho. Não apague os dados do navegador nem remova o app antes de exportar seu histórico."}</p></div>
     </section>
   );
 }

@@ -1,39 +1,57 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { LoaderCircle, RotateCw } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { createBrowserSupabaseClient } from "@/lib/supabase/client";
 
 export function LoginForm() {
-  const [email, setEmail] = useState("");
-  const [message, setMessage] = useState("");
-  const [sending, setSending] = useState(false);
+  const router = useRouter();
+  const started = useRef(false);
+  const [failed, setFailed] = useState(false);
+  const [message, setMessage] = useState("Preparando seu app neste iPhone…");
 
-  async function submit(event: React.FormEvent) {
-    event.preventDefault();
-    setSending(true);
-    setMessage("");
+  const openApp = useCallback(async () => {
+    setFailed(false);
+    setMessage("Preparando seu app neste iPhone…");
+
     try {
       const supabase = createBrowserSupabaseClient();
-      const { error } = await supabase.auth.signInWithOtp({
-        email,
-        options: {
-          emailRedirectTo: `${window.location.origin}/auth/callback`,
-        },
-      });
-      setMessage(error ? "Não foi possível enviar o link. Confira o e-mail e tente novamente." : "Link enviado. Se a conta havia sido apagada, ela será recriada com este e-mail. Abra o link neste mesmo iPhone.");
+      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError) throw sessionError;
+
+      if (!sessionData.session) {
+        const { error } = await supabase.auth.signInAnonymously({
+          options: { data: { name: "Lucas" } },
+        });
+        if (error) throw error;
+      }
+
+      router.replace("/");
+      router.refresh();
     } catch {
-      setMessage("Sem conexão com o login agora. Confira a internet e tente novamente.");
-    } finally {
-      setSending(false);
+      setFailed(true);
+      setMessage("Não foi possível abrir o app agora. Confira a internet e tente novamente.");
     }
-  }
+  }, [router]);
+
+  useEffect(() => {
+    if (started.current) return;
+    started.current = true;
+    void openApp();
+  }, [openApp]);
 
   return (
-    <form className="login-form" onSubmit={submit}>
-      <label htmlFor="email">E-mail</label>
-      <input id="email" type="email" inputMode="email" autoCapitalize="none" autoCorrect="off" autoComplete="email" required value={email} onChange={(event) => setEmail(event.target.value)} placeholder="seu@email.com" />
-      <button className="primary-button" type="submit" disabled={sending}>{sending ? "Enviando…" : "Receber link de acesso"}</button>
-      {message && <p className="form-message" role="status">{message}</p>}
-    </form>
+    <div className="login-form" role="status" aria-live="polite">
+      <p className="form-message button-with-icon">
+        {!failed && <LoaderCircle className="loading-icon" aria-hidden="true" />}
+        {message}
+      </p>
+      {failed && (
+        <button className="primary-button button-with-icon" type="button" onClick={() => void openApp()}>
+          <RotateCw aria-hidden="true" /> Tentar novamente
+        </button>
+      )}
+    </div>
   );
 }

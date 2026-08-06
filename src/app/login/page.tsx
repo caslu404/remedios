@@ -5,7 +5,7 @@ import { LoginForm } from "@/features/auth/login-form";
 import { isDemoMode } from "@/lib/env";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 
-export const metadata: Metadata = { title: "Entrar" };
+export const metadata: Metadata = { title: "Abrindo app" };
 export const dynamic = "force-dynamic";
 
 export default async function LoginPage() {
@@ -18,10 +18,10 @@ export default async function LoginPage() {
       <section className="login-card">
         <BrandMark />
         <p className="eyebrow">Tratamento Adaptativo</p>
-        <h1>Acesso deste iPhone</h1>
-        <p>O login protege seu histórico e suas notificações. Você recebe um link seguro e, na URL oficial, normalmente entra apenas uma vez neste aparelho.</p>
+        <h1>Abrindo seu app</h1>
+        <p>Este iPhone recebe uma sessão privada automaticamente. Você não precisa informar e-mail nem abrir links.</p>
         <LoginForm />
-        <p className="privacy-note">Use sempre <strong>remedios-seven.vercel.app</strong>. Links de preview de branches são ambientes separados e podem pedir outro login.</p>
+        <p className="privacy-note">Seus dados ficam vinculados a esta instalação. Não apague os dados do navegador nem remova o app antes de exportar seu histórico.</p>
       </section>
     </main>
   );
