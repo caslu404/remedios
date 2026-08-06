@@ -93,7 +93,7 @@ export async function confirmSchedule(supabase: SupabaseClient, userId: string, 
   if (error || !latest) throw error ?? new Error("Cronograma não encontrado.");
   const now = new Date().toISOString();
   const confirmedStatus = latest.status === "requires_review" ? "requires_review" : "confirmed";
-  const snapshot = { ...(latest.snapshot_json as object), status: confirmedStatus };
+  const snapshot = { ...(latest.snapshot_json as object), status: confirmedStatus, confirmedAt: now };
   await supabase.from("daily_schedules").update({ status: confirmedStatus, confirmed_at: now, snapshot_json: snapshot }).eq("id", latest.id);
   await supabase.from("daily_checkins").update({ confirmed_at: now }).eq("user_id", userId).eq("date", date);
   await supabase.from("schedule_events").upsert({ daily_schedule_id: latest.id, client_event_id: clientEventId ?? null, event_type: "schedule_confirmed", payload_json: {} }, { onConflict: "daily_schedule_id,client_event_id", ignoreDuplicates: true });

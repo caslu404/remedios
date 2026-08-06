@@ -34,6 +34,7 @@ import {
   type DoseRecord,
 } from "@/domain/scheduling";
 import {
+  clearLocalData,
   deleteSchedule,
   flushOfflineEvents,
   getAllSchedules,
@@ -44,7 +45,7 @@ import {
   setPreference,
   type OfflineEvent,
 } from "@/lib/offline/db";
-import { PushSetup } from "@/features/notifications/push-setup";
+import { PushSetup, syncExistingPushSubscription } from "@/features/notifications/push-setup";
 
 type Tab = "today" | "history" | "rules" | "settings";
 
@@ -151,6 +152,20 @@ function hasCompletedDoseRecord(schedule: DailySchedule): boolean {
   return schedule.doses.some((dose) => dose.takenMinute !== null || ["skipped", "missed", "cancelled_by_schedule_change"].includes(dose.status));
 }
 
+function recoveryEvents(schedule: DailySchedule): OfflineEvent[] {
+  const createdAt = Date.now();
+  const events: OfflineEvent[] = [];
+  const add = (type: OfflineEvent["type"], payload: Record<string, unknown>) => {
+    events.push({ id: crypto.randomUUID(), type, payload, createdAt: new Date(createdAt + events.length).toISOString() });
+  };
+  for (const dose of schedule.doses) {
+    if (dose.takenMinute !== null) add("dose_taken", { date: schedule.date, doseClientId: dose.id, takenTime: formatClock(dose.takenMinute) });
+    else if (dose.status === "skipped") add("dose_skipped", { date: schedule.date, doseClientId: dose.id });
+  }
+  if (schedule.confirmedAt) add("schedule_confirmed", { date: schedule.date });
+  return events;
+}
+
 export function TreatmentApp({ demoMode }: { demoMode: boolean }) {
   const searchParams = useSearchParams();
   const [preferences, setPreferences] = useState(DEFAULT_PREFERENCES);
@@ -190,6 +205,7 @@ export function TreatmentApp({ demoMode }: { demoMode: boolean }) {
           try {
             await flushOfflineEvents();
             if ("Notification" in window && Notification.permission === "granted") {
+              await syncExistingPushSubscription();
               await fetch("/api/push/day-start", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ enabled: effectivePreferences.wakePromptEnabled, time: effectivePreferences.wakePromptTime }) });
             }
             const [todayResponse, historyResponse] = await Promise.all([fetch("/api/schedules/today"), fetch("/api/history?limit=90")]);
@@ -199,6 +215,31 @@ export function TreatmentApp({ demoMode }: { demoMode: boolean }) {
                 localSchedule = remote.schedule;
                 setSchedule(remote.schedule);
                 await saveSchedule(remote.schedule);
+              } else if (!remote.schedule && localSchedule) {
+                const localCopy = localSchedule;
+                const generationResponse = await fetch("/api/schedules/generate", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    date: localCopy.date,
+                    timezone: localCopy.timezone,
+                    wakeTime: formatClock(localCopy.wakeMinute),
+                    plannedBedtime: effectivePreferences.usualBedtime,
+                    breakfastWindow: { start: effectivePreferences.breakfastStart, end: effectivePreferences.breakfastEnd },
+                    dinnerWindow: { start: effectivePreferences.dinnerStart, end: effectivePreferences.dinnerEnd },
+                  }),
+                });
+                if (generationResponse.ok) {
+                  const generated = await generationResponse.json() as { schedule: DailySchedule };
+                  for (const item of recoveryEvents(localCopy)) await queueOfflineEvent(item);
+                  await flushOfflineEvents();
+                  const refreshedResponse = await fetch("/api/schedules/today");
+                  const refreshed = refreshedResponse.ok ? await refreshedResponse.json() as { schedule: DailySchedule | null } : { schedule: null };
+                  localSchedule = refreshed.schedule ?? generated.schedule;
+                  setSchedule(localSchedule);
+                  await saveSchedule(localSchedule);
+                  setNotice("Sua conta foi recriada e os dados disponíveis neste iPhone foram vinculados novamente.");
+                }
               }
             }
             if (historyResponse.ok) {
@@ -296,7 +337,7 @@ export function TreatmentApp({ demoMode }: { demoMode: boolean }) {
 
   async function confirmDay() {
     if (!schedule) return;
-    const confirmed = { ...schedule, status: schedule.status === "requires_review" ? "requires_review" as const : "confirmed" as const };
+    const confirmed = { ...schedule, status: schedule.status === "requires_review" ? "requires_review" as const : "confirmed" as const, confirmedAt: new Date().toISOString() };
     setSchedule(confirmed);
     await saveSchedule(confirmed);
     await persistEvent(event("schedule_confirmed", { date: schedule.date }));
@@ -524,7 +565,6 @@ function TodayView(props: TodayProps) {
         <div className="wake-actions">
           <button className="wake-button" onClick={() => props.startDay(nowInSaoPaulo().time)}><span className="sun-symbol" aria-hidden="true"><Sun /></span><span><strong>Acordei agora</strong><small>Usar {nowInSaoPaulo().time}</small></span><ArrowRight aria-hidden="true" /></button>
           <div className="manual-time"><label htmlFor="wake-time">Informar outro horário</label><div><input id="wake-time" type="time" value={props.manualWake} onChange={(event) => props.setManualWake(event.target.value)} /><button onClick={() => props.startDay(props.manualWake)}>Montar cronograma</button></div></div>
-          <button className="quiet-button">Ainda não quero iniciar o dia</button>
         </div>
         <p className="safety-line"><ShieldCheck aria-hidden="true" /> Nenhuma tolerância clínica será presumida.</p>
       </section>
@@ -574,7 +614,7 @@ function TodayView(props: TodayProps) {
         ))}
       </div>
 
-      {schedule.status !== "confirmed" && <div className="confirmation-bar"><button className="primary-button" onClick={props.confirmDay}>Confirmar meu dia</button><button className="secondary-button" onClick={props.adjust}>Ajustar refeições ou sono</button></div>}
+      {!schedule.confirmedAt && <div className="confirmation-bar"><button className="primary-button" onClick={props.confirmDay}>Confirmar meu dia</button><button className="secondary-button" onClick={props.adjust}>Ajustar refeições ou sono</button></div>}
 
       {props.selectedDose && schedule.doses.some((dose) => dose.id === props.selectedDose) && (
         <DoseSheet
@@ -674,6 +714,22 @@ function RulesView() {
 function SettingsView({ preferences, save, demoMode }: { preferences: Preferences; save: (value: Preferences) => void; demoMode: boolean }) {
   const [draft, setDraft] = useState(preferences);
   const router = useRouter();
+
+  async function deleteAccount() {
+    const confirmation = window.prompt("Esta ação apaga permanentemente a conta e o histórico. Para continuar, digite APAGAR CONTA.");
+    if (confirmation !== "APAGAR CONTA") return;
+    const response = await fetch("/api/account", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ confirmation }),
+    });
+    if (response.ok) {
+      await clearLocalData();
+      router.push("/login");
+      router.refresh();
+    }
+  }
+
   return (
     <section className="section-view settings-view">
       <div className="section-heading"><div><p className="eyebrow">Rotina e dispositivo</p><h1>Ajustes</h1><p>Alterações valem para cronogramas futuros.</p></div></div>
@@ -705,7 +761,7 @@ function SettingsView({ preferences, save, demoMode }: { preferences: Preference
         </div>
       </form>
       <PushSetup demoMode={demoMode} wakePromptEnabled={preferences.wakePromptEnabled} wakePromptTime={preferences.wakePromptTime} />
-      <div className="settings-card"><h2>Conta e dados</h2><p>{demoMode ? "Modo demonstração: os dados ficam apenas neste aparelho." : "Conta conectada ao Supabase com políticas de acesso por usuário."}</p>{!demoMode && <div className="button-row"><button className="secondary-button button-with-icon" onClick={async () => { const { createBrowserSupabaseClient } = await import("@/lib/supabase/client"); await createBrowserSupabaseClient().auth.signOut(); router.push("/login"); router.refresh(); }}><LogOut aria-hidden="true" /> Sair da conta</button><button className="secondary-button button-with-icon danger-text" onClick={async () => { if (!window.confirm("Apagar permanentemente sua conta e todo o histórico? Esta ação não pode ser desfeita.")) return; const response = await fetch("/api/account", { method: "DELETE" }); if (response.ok) { router.push("/login"); router.refresh(); } }}><Trash2 aria-hidden="true" /> Apagar conta</button></div>}</div>
+      <div className="settings-card"><h2>Conta e dados</h2><p>{demoMode ? "Modo demonstração: os dados ficam apenas neste aparelho." : "Conta conectada ao Supabase com políticas de acesso por usuário."}</p>{!demoMode && <div className="button-row"><button className="secondary-button button-with-icon" onClick={async () => { const { createBrowserSupabaseClient } = await import("@/lib/supabase/client"); await createBrowserSupabaseClient().auth.signOut(); router.push("/login"); router.refresh(); }}><LogOut aria-hidden="true" /> Sair da conta</button><button className="secondary-button button-with-icon danger-text" onClick={() => void deleteAccount()}><Trash2 aria-hidden="true" /> Apagar conta definitivamente</button></div>}</div>
     </section>
   );
 }

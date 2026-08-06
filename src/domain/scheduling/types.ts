@@ -98,6 +98,7 @@ export interface DailySchedule {
   timezone: string;
   version: number;
   status: "draft" | "confirmed" | "requires_review";
+  confirmedAt?: string | null;
   generatedAt: string;
   generationReason: "checkin" | "dose_taken" | "manual";
   wakeMinute: number;

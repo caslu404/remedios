@@ -51,6 +51,16 @@ export async function deleteSchedule(date: string): Promise<void> {
   else memorySchedules.delete(date);
 }
 
+export async function clearLocalData(): Promise<void> {
+  const db = await dbPromise;
+  if (db) {
+    await Promise.all([db.clear("preferences"), db.clear("schedules"), db.clear("syncQueue")]);
+  }
+  memoryPreferences.clear();
+  memorySchedules.clear();
+  memoryQueue.clear();
+}
+
 export async function getSchedule(date: string): Promise<DailySchedule | undefined> {
   const db = await dbPromise;
   return db ? db.get("schedules", date) : memorySchedules.get(date);

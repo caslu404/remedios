@@ -18,10 +18,9 @@ export function LoginForm() {
         email,
         options: {
           emailRedirectTo: `${window.location.origin}/auth/callback`,
-          shouldCreateUser: false,
         },
       });
-      setMessage(error ? "Não foi possível enviar o link. Confira o e-mail e tente novamente." : "Link enviado. Abra-o neste mesmo iPhone; depois disso, o app mantém sua sessão.");
+      setMessage(error ? "Não foi possível enviar o link. Confira o e-mail e tente novamente." : "Link enviado. Se a conta havia sido apagada, ela será recriada com este e-mail. Abra o link neste mesmo iPhone.");
     } catch {
       setMessage("Sem conexão com o login agora. Confira a internet e tente novamente.");
     } finally {

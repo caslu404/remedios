@@ -11,6 +11,15 @@ function base64ToUint8Array(base64: string): Uint8Array<ArrayBuffer> {
   return output;
 }
 
+export async function syncExistingPushSubscription(): Promise<boolean> {
+  if (!("serviceWorker" in navigator) || !("PushManager" in window) || !("Notification" in window) || Notification.permission !== "granted") return false;
+  const registration = await navigator.serviceWorker.ready;
+  const subscription = await registration.pushManager.getSubscription();
+  if (!subscription) return false;
+  const response = await fetch("/api/push/subscribe", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(subscription.toJSON()) });
+  return response.ok;
+}
+
 export function PushSetup({ demoMode, wakePromptEnabled, wakePromptTime }: { demoMode: boolean; wakePromptEnabled: boolean; wakePromptTime: string }) {
   const [standalone] = useState(() => typeof window !== "undefined" && (window.matchMedia("(display-mode: standalone)").matches || (navigator as Navigator & { standalone?: boolean }).standalone === true));
   const [status, setStatus] = useState<NotificationPermission | "unsupported">(() => typeof window !== "undefined" && "Notification" in window ? Notification.permission : "unsupported");
@@ -37,12 +46,12 @@ export function PushSetup({ demoMode, wakePromptEnabled, wakePromptTime }: { dem
       return;
     }
     const registration = await navigator.serviceWorker.ready;
-    const subscription = await registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: base64ToUint8Array(publicKey) });
-    const response = await fetch("/api/push/subscribe", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(subscription.toJSON()) });
-    if (response.ok) {
+    await registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: base64ToUint8Array(publicKey) });
+    const subscriptionSaved = await syncExistingPushSubscription();
+    if (subscriptionSaved) {
       await fetch("/api/push/day-start", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ enabled: wakePromptEnabled, time: wakePromptTime }) });
     }
-    setMessage(response.ok ? "Lembretes ativados neste dispositivo." : "Não foi possível salvar este dispositivo.");
+    setMessage(subscriptionSaved ? "Lembretes ativados neste dispositivo." : "Não foi possível salvar este dispositivo.");
   }
 
   async function test(kind: "day_start" | "medication") {

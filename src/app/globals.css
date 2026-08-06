@@ -162,7 +162,6 @@ button:focus-visible, input:focus-visible, summary:focus-visible { outline: 3px 
 .manual-time > label { display: block; margin-bottom: 8px; color: #55625c; font-size: 12px; font-weight: 800; }
 .manual-time > div { display: grid; grid-template-columns: 1fr 1.5fr; gap: 8px; }
 .manual-time button, .dose-actions label button { min-height: 50px; color: var(--forest); background: var(--forest-soft); border: 0; border-radius: 13px; font-weight: 800; }
-.quiet-button { min-height: 46px; color: #5d6963; background: transparent; border: 0; font-weight: 700; }
 .safety-line { display: flex; align-items: center; justify-content: center; gap: 7px; color: #708078; font-size: 12px; }
 .safety-line svg { width: 15px; height: 15px; flex: 0 0 auto; color: #7b9d35; }
 
