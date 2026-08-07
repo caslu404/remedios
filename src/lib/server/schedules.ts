@@ -1,10 +1,32 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { DailySchedule, GenerateScheduleInput } from "@/domain/scheduling";
 import { generateDailySchedule } from "@/domain/scheduling";
+import { updateSnapshotDose } from "./doses";
 import { minuteToClock, zonedMinuteToIso } from "@/lib/time/zoned";
 import { ensureInitialTreatment } from "./treatment";
 
+const OPEN_DOSE_STATUSES = ["planned", "notified", "snoozed", "requires_review"];
+
+async function expirePastDoses(supabase: SupabaseClient, userId: string, beforeDate: string) {
+  const { data: stale, error } = await supabase
+    .from("scheduled_doses")
+    .select("id,daily_schedule_id,client_key,daily_schedules!inner(user_id,date)")
+    .eq("daily_schedules.user_id", userId)
+    .lt("daily_schedules.date", beforeDate)
+    .in("status", OPEN_DOSE_STATUSES);
+  if (error) throw error;
+  if (!stale?.length) return;
+  const ids = stale.map((dose) => dose.id);
+  const { error: updateError } = await supabase.from("scheduled_doses").update({ status: "missed" }).in("id", ids);
+  if (updateError) throw updateError;
+  await supabase.from("notification_jobs").update({ status: "cancelled" }).in("scheduled_dose_id", ids).eq("status", "queued");
+  for (const dose of stale) {
+    await updateSnapshotDose(supabase, dose.daily_schedule_id, dose.client_key, { status: "missed" });
+  }
+}
+
 export async function createAndPersistSchedule(supabase: SupabaseClient, userId: string, input: Omit<GenerateScheduleInput, "phases">, clientEventId?: string) {
+  await expirePastDoses(supabase, userId, input.date);
   const phases = await ensureInitialTreatment(supabase, userId);
   const schedule = generateDailySchedule({ ...input, phases });
   await supabase.from("daily_checkins").upsert({

@@ -8,6 +8,10 @@ export async function ownedDose(supabase: SupabaseClient, userId: string, doseId
   return data;
 }
 
+export async function cancelQueuedNotifications(supabase: SupabaseClient, doseId: string) {
+  await supabase.from("notification_jobs").update({ status: "cancelled" }).eq("scheduled_dose_id", doseId).eq("status", "queued");
+}
+
 export async function markDoseTaken(supabase: SupabaseClient, userId: string, doseId: string, takenTime: string) {
   const dose = await ownedDose(supabase, userId, doseId);
   if (!dose) throw new Error("Dose não encontrada.");
@@ -20,6 +24,7 @@ export async function markDoseTaken(supabase: SupabaseClient, userId: string, do
   const takenAt = zonedMinuteToIso(date, takenMinute, timezone);
   const { data: updated, error } = await supabase.from("scheduled_doses").update({ status, taken_at: takenAt }).eq("id", doseId).select().single();
   if (error) throw error;
+  await cancelQueuedNotifications(supabase, doseId);
   await updateSnapshotDose(supabase, dose.daily_schedule_id, dose.client_key, { status, takenMinute });
   await supabase.from("schedule_events").insert({ daily_schedule_id: dose.daily_schedule_id, event_type: "dose_taken", payload_json: { doseId, scheduledAt: dose.scheduled_at, takenAt, status, futureDosesMoved: false, reason: "reschedule_policy_unconfirmed" } });
   return updated;

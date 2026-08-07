@@ -4,7 +4,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { authenticatedContext, serverError, unauthorized } from "@/lib/server/auth";
 import { clockSchema, dateSchema, scheduleInputSchema } from "@/lib/server/schemas";
 import { confirmSchedule, createAndPersistSchedule, latestSchedule } from "@/lib/server/schedules";
-import { markDoseTaken, updateSnapshotDose } from "@/lib/server/doses";
+import { cancelQueuedNotifications, markDoseTaken, updateSnapshotDose } from "@/lib/server/doses";
 import { withinRateLimit } from "@/lib/server/rate-limit";
 
 const eventSchema = z.object({ id: z.uuid(), type: z.enum(["day_started", "schedule_confirmed", "dose_taken", "dose_skipped", "dose_snoozed"]), payload: z.record(z.string(), z.unknown()), createdAt: z.iso.datetime() });
@@ -44,9 +44,11 @@ export async function POST(request: Request) {
             await markDoseTaken(context.supabase, context.user.id, dose.id, clockSchema.parse(item.payload.takenTime));
           } else if (item.type === "dose_skipped") {
             await context.supabase.from("scheduled_doses").update({ status: "skipped" }).eq("id", dose.id);
+            await cancelQueuedNotifications(context.supabase, dose.id);
             await updateSnapshotDose(context.supabase, dose.daily_schedule_id, dose.client_key, { status: "skipped" });
           } else {
             await context.supabase.from("scheduled_doses").update({ status: "snoozed" }).eq("id", dose.id);
+            await cancelQueuedNotifications(context.supabase, dose.id);
             await updateSnapshotDose(context.supabase, dose.daily_schedule_id, dose.client_key, { status: "snoozed" });
             await context.supabase.from("notification_jobs").insert({ user_id: context.user.id, scheduled_dose_id: dose.id, send_at: new Date(Date.now() + 10 * 60_000).toISOString(), type: "snooze", payload_json: { title: "Lembrete adiado", body: dose.notes, url: `/?dose=${dose.id}` } });
           }
