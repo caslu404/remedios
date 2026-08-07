@@ -700,7 +700,7 @@ function RulesView() {
             <div><dt>Intervalo-alvo</dt><dd>{phase.interval.targetMinutes === null ? "Não definido" : `${phase.interval.targetMinutes / 60} h`}</dd></div>
             <div><dt>Mínimo seguro</dt><dd className={phase.interval.minimumMinutes === null ? "pending" : ""}>{phase.interval.minimumMinutes === null ? "Não informado" : `${phase.interval.minimumMinutes} min`}</dd></div>
             <div><dt>Máximo seguro</dt><dd className={phase.interval.maximumMinutes === null ? "pending" : ""}>{phase.interval.maximumMinutes === null ? "Não informado" : `${phase.interval.maximumMinutes} min`}</dd></div>
-            <div><dt>Após atraso</dt><dd className="pending">Não mover automaticamente</dd></div>
+            <div><dt>Após atraso</dt><dd className={phase.reschedulePolicy.confirmed && phase.reschedulePolicy.moveFutureDoses ? "" : "pending"}>{phase.reschedulePolicy.confirmed && phase.reschedulePolicy.moveFutureDoses ? "Move as próximas doses do dia, dentro do intervalo confirmado" : "Não mover automaticamente"}</dd></div>
           </dl>
         </article>
       ))}</div>

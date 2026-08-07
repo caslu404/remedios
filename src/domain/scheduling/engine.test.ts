@@ -40,7 +40,7 @@ describe("generateDailySchedule", () => {
     },
   );
 
-  it("reproduz os horários-alvo do exemplo sem inferir tolerâncias", () => {
+  it("reproduz os horários-alvo do exemplo e só aplica tolerâncias confirmadas pelo médico", () => {
     const schedule = generateDailySchedule(input());
     const times = Object.fromEntries(
       schedule.doses.map((dose) => [`${dose.medicationId}-${dose.sequenceNumber}`, dose.scheduledMinute]),
@@ -55,7 +55,10 @@ describe("generateDailySchedule", () => {
       "rifaximina-2": 1140,
       "metronidazol-3": 1340,
     });
-    expect(INITIAL_TREATMENT_PHASES.find((phase) => phase.medicationId === "metronidazol")?.interval.minimumMinutes).toBeNull();
+    const metronidazol = INITIAL_TREATMENT_PHASES.find((phase) => phase.medicationId === "metronidazol")!;
+    expect(metronidazol.interval.minimumMinutes).toBe(420);
+    expect(metronidazol.interval.maximumMinutes).toBe(540);
+    expect(INITIAL_TREATMENT_PHASES.find((phase) => phase.medicationId === "nac")?.interval.minimumMinutes).toBeNull();
   });
 
   it("respeita as mudanças de fase e as datas inclusivas", () => {
@@ -121,17 +124,29 @@ describe("validateSchedule e detectConflicts", () => {
 
 describe("recalculateAfterDoseTaken", () => {
   it("registra o horário real, mas não move doses sem política validada", () => {
-    const schedule = generateDailySchedule(input());
+    const phases: MedicationPhase[] = structuredClone(INITIAL_TREATMENT_PHASES);
+    const metro = phases.find((phase) => phase.medicationId === "metronidazol")!;
+    metro.reschedulePolicy = { moveFutureDoses: null, confirmed: false, source: null };
+    const schedule = generateDailySchedule(input({ phases }));
     const second = schedule.doses.find((dose) => dose.medicationId === "metronidazol" && dose.sequenceNumber === 2)!;
     const thirdBefore = schedule.doses.find((dose) => dose.medicationId === "metronidazol" && dose.sequenceNumber === 3)!.scheduledMinute;
     const updated = recalculateAfterDoseTaken(
       { doseId: second.id, takenTime: "15:42", occurredAt: "2026-08-06T18:42:00Z" },
       schedule,
-      INITIAL_TREATMENT_PHASES,
+      phases,
     );
     expect(updated.doses.find((dose) => dose.id === second.id)?.status).toBe("taken_late");
     expect(updated.doses.find((dose) => dose.medicationId === "metronidazol" && dose.sequenceNumber === 3)?.scheduledMinute).toBe(thirdBefore);
     expect(updated.conflicts.some((item) => item.code === "RESCHEDULE_POLICY_UNCONFIRMED")).toBe(true);
+  });
+
+  it("move as doses futuras de metronidazol automaticamente, pois o médico confirmou a tolerância de 7 a 9 horas", () => {
+    const schedule = generateDailySchedule(input());
+    const second = schedule.doses.find((dose) => dose.medicationId === "metronidazol" && dose.sequenceNumber === 2)!;
+    const updated = recalculateAfterDoseTaken({ doseId: second.id, takenTime: "15:42" }, schedule, INITIAL_TREATMENT_PHASES);
+    const third = updated.doses.find((dose) => dose.medicationId === "metronidazol" && dose.sequenceNumber === 3)!;
+    expect(third.scheduledMinute).toBe(1422);
+    expect(updated.conflicts.some((item) => item.code === "RESCHEDULE_POLICY_UNCONFIRMED")).toBe(false);
   });
 
   it("move doses futuras no intervalo-alvo somente com política explicitamente confirmada", () => {

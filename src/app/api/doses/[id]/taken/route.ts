@@ -10,7 +10,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   if (!parsed.success) return NextResponse.json({ error: "Horário real inválido." }, { status: 400 });
   try {
     const { id } = await params;
-    return NextResponse.json({ dose: await markDoseTaken(context.supabase, context.user.id, id, parsed.data.takenTime), futureDosesMoved: false });
+    const { dose, futureDosesMoved } = await markDoseTaken(context.supabase, context.user.id, id, parsed.data.takenTime);
+    return NextResponse.json({ dose, futureDosesMoved });
   } catch (error) {
     return serverError("Não foi possível registrar a dose.", error);
   }
