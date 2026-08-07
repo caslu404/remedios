@@ -10,12 +10,6 @@ const unvalidatedInterval = (targetMinutes: number | null) => ({
   notes: "Tolerâncias aguardando validação profissional.",
 });
 
-const conservativeReschedule = {
-  moveFutureDoses: null,
-  confirmed: false,
-  source: null,
-} as const;
-
 const CONFIRMED_WITH_PRESCRIBER = "Confirmado com o médico prescritor em 07/08/2026";
 const CONFIRMED_BY_PATIENT = "Confirmado por Lucas em 07/08/2026";
 
@@ -97,7 +91,7 @@ export const INITIAL_TREATMENT_PHASES: MedicationPhase[] = [
       confirmed: true,
       source: "PRD v1.0 — prescrição informada",
     },
-    reschedulePolicy: conservativeReschedule,
+    reschedulePolicy: patientConfirmedReschedule,
   },
   {
     id: "metronidazol-fase-unica",

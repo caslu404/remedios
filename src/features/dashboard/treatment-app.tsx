@@ -150,11 +150,7 @@ function hasStaleConflictSignals(schedule: DailySchedule): boolean {
   const hasLateMetronidazol = schedule.doses.some(
     (dose) => dose.medicationId === "metronidazol" && dose.scheduledMinute !== null && dose.scheduledMinute > schedule.plannedBedMinute,
   );
-  const hasStaleReschedulePolicy = schedule.conflicts.some((item) => {
-    if (item.code !== "RESCHEDULE_POLICY_UNCONFIRMED") return false;
-    const dose = schedule.doses.find((candidate) => item.doseIds.includes(candidate.id));
-    return dose?.medicationId !== "rifaximina";
-  });
+  const hasStaleReschedulePolicy = schedule.conflicts.some((item) => item.code === "RESCHEDULE_POLICY_UNCONFIRMED");
   return hasUnconfirmedGrouping || hasLateMetronidazol || hasStaleReschedulePolicy;
 }
 
