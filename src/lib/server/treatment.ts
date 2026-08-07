@@ -12,7 +12,7 @@ const MEDICATION_DETAILS: Record<string, { fullName: string; strength: string; u
 
 function rescheduleRuleTimestamps(phase: MedicationPhase): { confirmed_at: string | null; confirmed_by: string | null } {
   if (!phase.reschedulePolicy.confirmed) return { confirmed_at: null, confirmed_by: null };
-  return { confirmed_at: phase.interval.confirmedAt, confirmed_by: phase.interval.confirmedBy };
+  return { confirmed_at: phase.reschedulePolicy.confirmedAt, confirmed_by: phase.reschedulePolicy.confirmedBy };
 }
 
 async function reconcilePhaseRules(supabase: SupabaseClient, userId: string): Promise<void> {
@@ -135,6 +135,7 @@ export async function loadTreatmentPhases(supabase: SupabaseClient, userId: stri
     .eq("medications.treatments.user_id", userId)
     .order("start_date");
   if (error) throw error;
+  const groupingByPhaseId = new Map(INITIAL_TREATMENT_PHASES.map((phase) => [phase.id, phase.morningGroupingWithNexium]));
   return (data ?? []).map((row) => {
     const medication = row.medications as unknown as { slug: string; display_name: string; continuous: boolean };
     const rules = row.medication_rules as Array<{ rule_type: string; rule_config_json: Record<string, unknown>; source: string | null; confirmed_at: string | null; confirmed_by: string | null }>;
@@ -164,10 +165,13 @@ export async function loadTreatmentPhases(supabase: SupabaseClient, userId: stri
       continuous: medication.continuous,
       slotStrategy: row.slot_strategy,
       dependency: dependencyRule ? dependencyRule.rule_config_json as unknown as MedicationPhase["dependency"] : undefined,
+      morningGroupingWithNexium: groupingByPhaseId.get(row.client_key),
       reschedulePolicy: {
         moveFutureDoses: typeof rescheduleRule?.rule_config_json.moveFutureDoses === "boolean" ? rescheduleRule.rule_config_json.moveFutureDoses : null,
         confirmed: Boolean(rescheduleRule?.confirmed_at),
         source: rescheduleRule?.source ?? null,
+        confirmedAt: rescheduleRule?.confirmed_at ?? null,
+        confirmedBy: rescheduleRule?.confirmed_by ?? null,
       },
     } as MedicationPhase;
   });
