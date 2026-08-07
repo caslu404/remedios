@@ -145,6 +145,14 @@ function usesLegacyMetronidazolAnchor(schedule: DailySchedule): boolean {
     && firstDose.scheduledMinute !== schedule.wakeMinute;
 }
 
+function hasStaleConflictSignals(schedule: DailySchedule): boolean {
+  const hasUnconfirmedGrouping = schedule.conflicts.some((item) => item.code === "UNCONFIRMED_NEXIUM_NAC_GROUPING");
+  const hasLateMetronidazol = schedule.doses.some(
+    (dose) => dose.medicationId === "metronidazol" && dose.scheduledMinute !== null && dose.scheduledMinute > schedule.plannedBedMinute,
+  );
+  return hasUnconfirmedGrouping || hasLateMetronidazol;
+}
+
 function hasCompletedDoseRecord(schedule: DailySchedule): boolean {
   return schedule.doses.some((dose) => dose.takenMinute !== null || ["skipped", "missed", "cancelled_by_schedule_change"].includes(dose.status));
 }
@@ -250,15 +258,15 @@ export function TreatmentApp({ demoMode }: { demoMode: boolean }) {
             setNotice("A sincronização está temporariamente indisponível. Você pode iniciar e registrar o dia normalmente neste iPhone.");
           }
         }
-        if (localSchedule && usesLegacyMetronidazolAnchor(localSchedule)) {
+        if (localSchedule && (usesLegacyMetronidazolAnchor(localSchedule) || hasStaleConflictSignals(localSchedule))) {
           if (hasCompletedDoseRecord(localSchedule)) {
-            setNotice("O novo alvo do metronidazol valerá nos próximos cronogramas. O dia atual foi preservado porque já contém registros.");
+            setNotice("As regras atualizadas valerão nos próximos cronogramas. O dia atual foi preservado porque já contém registros.");
           } else {
             await deleteSchedule(today);
             localSchedule = null;
             setSchedule(null);
             await reloadHistory();
-            setNotice("Atualizamos o alvo do metronidazol. Informe novamente o horário em que acordou para recriar o cronograma de hoje.");
+            setNotice("Atualizamos as regras de Nexium/NAC e do metronidazol. Informe novamente o horário em que acordou para recriar o cronograma de hoje.");
           }
         }
       } catch {
