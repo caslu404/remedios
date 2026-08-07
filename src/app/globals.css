@@ -238,6 +238,7 @@ button:focus-visible, input:focus-visible, summary:focus-visible { outline: 3px 
 .dose-item em { color: #64716b; font-size: 11px; font-style: normal; font-weight: 800; text-align: right; }
 .dose-item.taken_on_time, .dose-item.taken_late, .dose-item.taken_early { background: #edf4e8; border-color: #c0d5b2; }
 .dose-item.skipped, .dose-item.requires_review { background: #fff4ef; border-color: #ebc6ba; }
+.mark-all-button { min-height: 44px; margin-top: 2px; padding: 0 16px; color: var(--forest); background: var(--forest-soft); border: 1px dashed #b9c9bf; border-radius: 14px; font-weight: 800; font-size: 13px; text-align: center; }
 .meal-item { display: block; color: #5b685f; background: transparent; border-style: dashed; }
 .meal-item > summary { display: grid; grid-template-columns: 20px 1fr auto; align-items: center; gap: 8px; cursor: pointer; list-style: none; }
 .meal-item > summary::-webkit-details-marker { display: none; }
@@ -271,6 +272,9 @@ button:focus-visible, input:focus-visible, summary:focus-visible { outline: 3px 
 .split-actions button { min-height: 48px; color: var(--forest); background: transparent; border: 1px solid #c9cfca; border-radius: 13px; font-weight: 800; }
 .split-actions .danger-text { color: var(--danger); }
 .recorded-state { padding: 16px; color: var(--forest); background: var(--forest-soft); border-radius: 14px; font-weight: 800; }
+.group-dose-list { display: grid; gap: 8px; margin: 0 0 24px; padding: 0; list-style: none; }
+.group-dose-list li { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 12px 14px; background: var(--cream); border-radius: 13px; }
+.group-dose-list small { color: var(--muted); }
 
 .section-view { animation: reveal .28s ease-out; }
 @keyframes reveal { from { opacity: 0; transform: translateY(8px); } }

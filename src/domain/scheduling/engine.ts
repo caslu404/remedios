@@ -112,8 +112,17 @@ export function generateDailySchedule(input: GenerateScheduleInput): DailySchedu
   let eveningNacMinute: number | null = null;
 
   if (nac) {
-    doses.push(makeDose(input.date, nac, 1, wake, "Alvo no despertar; agrupamento com Nexium requer revisão"));
-    if (nexium) {
+    const groupingConfirmed = nac.morningGroupingWithNexium?.confirmed === true;
+    doses.push(
+      makeDose(
+        input.date,
+        nac,
+        1,
+        wake,
+        groupingConfirmed ? "Alvo no despertar, agrupado com Nexium conforme confirmado" : "Alvo no despertar; agrupamento com Nexium requer revisão",
+      ),
+    );
+    if (nexium && !groupingConfirmed) {
       conflicts.push(
         conflict(
           "UNCONFIRMED_NEXIUM_NAC_GROUPING",
@@ -169,8 +178,16 @@ export function generateDailySchedule(input: GenerateScheduleInput): DailySchedu
       }
     } else {
       for (let sequence = 1; sequence <= metronidazol.dosesPerDay; sequence += 1) {
-        const minute = wake + interval * (sequence - 1);
-        doses.push(makeDose(input.date, metronidazol, sequence, minute < 1440 ? minute : null, "Intervalo-alvo de 8 horas a partir do despertar"));
+        const target = wake + interval * (sequence - 1);
+        if (target >= 1440) {
+          doses.push(makeDose(input.date, metronidazol, sequence, null, "Intervalo-alvo de 8 horas a partir do despertar"));
+          continue;
+        }
+        const minute = Math.min(target, bed);
+        const timingBasis = minute < target
+          ? "Antecipada para não ultrapassar o horário padrão de dormir"
+          : "Intervalo-alvo de 8 horas a partir do despertar";
+        doses.push(makeDose(input.date, metronidazol, sequence, minute, timingBasis));
       }
     }
   }
@@ -276,11 +293,11 @@ export function detectConflicts(schedule: DailySchedule, phases: MedicationPhase
     if (!activeOn(phase, schedule.date)) {
       conflicts.push(conflict("DOSE_OUTSIDE_PHASE", "Dose criada fora da data de uso da fase.", [dose.id], "blocking"));
     }
-    if (dose.scheduledMinute !== null && dose.scheduledMinute >= schedule.plannedBedMinute) {
+    if (dose.scheduledMinute !== null && dose.scheduledMinute > schedule.plannedBedMinute) {
       conflicts.push(
         conflict(
           "DOSE_AT_OR_AFTER_BEDTIME",
-          `${dose.medicationName} ficou às ${formatClock(dose.scheduledMinute)}, no ou após o horário provável de dormir.`,
+          `${dose.medicationName} ficou às ${formatClock(dose.scheduledMinute)}, após o horário provável de dormir.`,
           [dose.id],
         ),
       );
