@@ -17,6 +17,7 @@ const conservativeReschedule = {
 } as const;
 
 const CONFIRMED_WITH_PRESCRIBER = "Confirmado com o médico prescritor em 07/08/2026";
+const CONFIRMED_BY_PATIENT = "Confirmado por Lucas em 07/08/2026";
 
 const metronidazolInterval = {
   targetMinutes: 480,
@@ -65,6 +66,10 @@ export const INITIAL_TREATMENT_PHASES: MedicationPhase[] = [
     rigidity: "high",
     slotStrategy: "wake",
     reschedulePolicy: conservativeReschedule,
+    morningGroupingWithNexium: {
+      confirmed: true,
+      source: CONFIRMED_BY_PATIENT,
+    },
   },
   {
     id: "rifaximina-fase-unica",

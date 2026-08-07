@@ -96,6 +96,18 @@ describe("generateDailySchedule", () => {
     expect(schedule.conflicts.some((item) => item.code === "DOSE_AT_OR_AFTER_BEDTIME")).toBe(true);
     expect(schedule.doses.filter((dose) => dose.medicationId === "metronidazol")).toHaveLength(3);
   });
+
+  it("antecipa a última dose de metronidazol para não ultrapassar o horário padrão de dormir", () => {
+    const schedule = generateDailySchedule(input({ wakeTime: "07:10", plannedBedtime: "22:30" }));
+    const third = schedule.doses.find((dose) => dose.medicationId === "metronidazol" && dose.sequenceNumber === 3)!;
+    expect(third.scheduledMinute).toBe(22 * 60 + 30);
+    expect(schedule.conflicts.some((item) => item.code === "DOSE_AT_OR_AFTER_BEDTIME" && item.doseIds.includes(third.id))).toBe(false);
+  });
+
+  it("não gera mais o alerta de agrupamento entre Nexium e NAC, já confirmado", () => {
+    const schedule = generateDailySchedule(input());
+    expect(schedule.conflicts.some((item) => item.code === "UNCONFIRMED_NEXIUM_NAC_GROUPING")).toBe(false);
+  });
 });
 
 describe("validateSchedule e detectConflicts", () => {

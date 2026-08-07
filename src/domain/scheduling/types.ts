@@ -48,6 +48,10 @@ export interface MedicationPhase {
     confirmed: boolean;
     source: string | null;
   };
+  morningGroupingWithNexium?: {
+    confirmed: boolean;
+    source: string | null;
+  };
   reschedulePolicy: {
     moveFutureDoses: boolean | null;
     confirmed: boolean;

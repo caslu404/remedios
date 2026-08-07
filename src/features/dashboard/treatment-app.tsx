@@ -174,6 +174,7 @@ export function TreatmentApp({ demoMode }: { demoMode: boolean }) {
   const [online, setOnline] = useState(true);
   const [notice, setNotice] = useState("");
   const [selectedDose, setSelectedDose] = useState<string | null>(null);
+  const [selectedGroup, setSelectedGroup] = useState<string[] | null>(null);
   const [clockTick, setClockTick] = useState(0);
   const today = nowInSaoPaulo().date;
   const linkedDose = searchParams.get("dose");
@@ -353,6 +354,24 @@ export function TreatmentApp({ demoMode }: { demoMode: boolean }) {
     setNotice(moved ? "Dose registrada e horários futuros atualizados dentro das regras confirmadas." : "Dose registrada. Nenhum horário futuro foi alterado automaticamente.");
   }
 
+  async function takeAllDoses(doseIds: string[], takenTime: string) {
+    if (!schedule) return;
+    let current = schedule;
+    const events: OfflineEvent[] = [];
+    for (const doseId of doseIds) {
+      const dose = current.doses.find((item) => item.id === doseId);
+      if (!dose || dose.takenMinute !== null) continue;
+      current = recalculateAfterDoseTaken({ doseId, takenTime }, current, INITIAL_TREATMENT_PHASES);
+      events.push(event("dose_taken", { date: schedule.date, doseClientId: doseId, takenTime }));
+    }
+    setSchedule(current);
+    setSelectedGroup(null);
+    await saveSchedule(current);
+    await reloadHistory();
+    for (const item of events) await persistEvent(item);
+    setNotice(events.length ? `${events.length} dose(s) registradas às ${takenTime}.` : "Nenhuma dose pendente neste horário.");
+  }
+
   async function skipDose(dose: DoseRecord) {
     if (!schedule) return;
     const updated: DailySchedule = {
@@ -484,7 +503,10 @@ export function TreatmentApp({ demoMode }: { demoMode: boolean }) {
             nextBlock={nextBlock}
             selectedDose={selectedDose}
             setSelectedDose={setSelectedDose}
+            selectedGroup={selectedGroup}
+            setSelectedGroup={setSelectedGroup}
             takeDose={takeDose}
+            takeAllDoses={takeAllDoses}
             skipDose={skipDose}
             snoozeDose={snoozeDose}
             adjust={() => setTab("settings")}
@@ -524,10 +546,17 @@ interface TodayProps {
   nextBlock: DoseRecord[];
   selectedDose: string | null;
   setSelectedDose: (id: string | null) => void;
+  selectedGroup: string[] | null;
+  setSelectedGroup: (ids: string[] | null) => void;
   takeDose: (dose: DoseRecord, time: string) => void;
+  takeAllDoses: (doseIds: string[], time: string) => void;
   skipDose: (dose: DoseRecord) => void;
   snoozeDose: (dose: DoseRecord) => void;
   adjust: () => void;
+}
+
+function unrecordedDoseIds(doses: DoseRecord[]): string[] {
+  return doses.filter((dose) => !dose.status.startsWith("taken_") && dose.status !== "skipped").map((dose) => dose.id);
 }
 
 function TodayView(props: TodayProps) {
@@ -582,7 +611,7 @@ function TodayView(props: TodayProps) {
       {props.nextDose && (
         <article className="next-card">
           <div className="next-label"><span>Próxima ação</span><b>{props.nextDose.scheduledMinute === null ? "Revisar" : nextDoseTimeLabel(props.nextDose.scheduledMinute)}</b></div>
-          {props.nextBlock.length > 1 ? <><h2>{props.nextBlock.length} medicamentos neste horário</h2><p>Abra cada item e registre separadamente o que você tomou.</p><div className="next-dose-list">{props.nextBlock.map((dose) => <button key={dose.id} onClick={() => props.setSelectedDose(dose.id)}><span><strong>{dose.medicationName}</strong><small>{dose.quantity} {dose.doseUnit}</small></span><ArrowRight aria-hidden="true" /></button>)}</div></> : <><h2>{props.nextDose.medicationName}</h2><p>{props.nextDose.quantity} {props.nextDose.doseUnit} · {props.nextDose.instruction}</p><button className="button-with-icon" onClick={() => props.setSelectedDose(props.nextDose!.id)}>Abrir registro <ArrowRight aria-hidden="true" /></button></>}
+          {props.nextBlock.length > 1 ? <><h2>{props.nextBlock.length} medicamentos neste horário</h2><p>Abra cada item para registrar separadamente, ou marque todos de uma vez.</p><button className="secondary-button" onClick={() => props.setSelectedGroup(props.nextBlock.map((dose) => dose.id))}>Marcar todos como tomados</button><div className="next-dose-list">{props.nextBlock.map((dose) => <button key={dose.id} onClick={() => props.setSelectedDose(dose.id)}><span><strong>{dose.medicationName}</strong><small>{dose.quantity} {dose.doseUnit}</small></span><ArrowRight aria-hidden="true" /></button>)}</div></> : <><h2>{props.nextDose.medicationName}</h2><p>{props.nextDose.quantity} {props.nextDose.doseUnit} · {props.nextDose.instruction}</p><button className="button-with-icon" onClick={() => props.setSelectedDose(props.nextDose!.id)}>Abrir registro <ArrowRight aria-hidden="true" /></button></>}
         </article>
       )}
 
@@ -596,19 +625,23 @@ function TodayView(props: TodayProps) {
       <div className="timeline-heading"><h2>Linha do tempo</h2><span>Horário local · 24 h</span></div>
       <p className="timeline-help">Toque em cada medicamento para marcar “Tomei agora”, informar outro horário, adiar ou registrar que não tomou.</p>
       <div className="timeline">
-        {grouped.map((group) => (
-          <div className="timeline-row" key={group.key} data-timeline-time={group.minute === null ? "review" : formatClock(group.minute)}>
-            <time>{group.minute === null ? "—" : formatClock(group.minute)}</time>
-            <span className={`timeline-dot ${group.items.some((item) => item.type === "dose" && item.dose.status.startsWith("taken_")) ? "done" : ""}`} />
-            <div className="timeline-content">
-              {group.items.map((item) => item.type === "meal" ? <details className="meal-item" key={item.id}><summary><Utensils aria-hidden="true" /><strong>{item.label}</strong><small>Entender este horário</small></summary><p>Esta refeição funciona como âncora do cronograma. Abra e registre separadamente cada medicamento mostrado neste mesmo horário.</p></details> : (
-                <button className={`dose-item ${item.dose.status}`} key={item.dose.id} onClick={() => props.setSelectedDose(item.dose.id)}>
-                  <span><strong>{item.dose.medicationName}</strong><small>{item.dose.quantity} {item.dose.doseUnit}</small></span><em>{doseStateLabel(item.dose.status)}</em>
-                </button>
-              ))}
+        {grouped.map((group) => {
+          const pendingIds = unrecordedDoseIds(group.items.filter((item) => item.type === "dose").map((item) => item.dose));
+          return (
+            <div className="timeline-row" key={group.key} data-timeline-time={group.minute === null ? "review" : formatClock(group.minute)}>
+              <time>{group.minute === null ? "—" : formatClock(group.minute)}</time>
+              <span className={`timeline-dot ${group.items.some((item) => item.type === "dose" && item.dose.status.startsWith("taken_")) ? "done" : ""}`} />
+              <div className="timeline-content">
+                {group.items.map((item) => item.type === "meal" ? <details className="meal-item" key={item.id}><summary><Utensils aria-hidden="true" /><strong>{item.label}</strong><small>Entender este horário</small></summary><p>Esta refeição funciona como âncora do cronograma. Abra e registre separadamente cada medicamento mostrado neste mesmo horário.</p></details> : (
+                  <button className={`dose-item ${item.dose.status}`} key={item.dose.id} onClick={() => props.setSelectedDose(item.dose.id)}>
+                    <span><strong>{item.dose.medicationName}</strong><small>{item.dose.quantity} {item.dose.doseUnit}</small></span><em>{doseStateLabel(item.dose.status)}</em>
+                  </button>
+                ))}
+                {pendingIds.length > 1 && <button className="mark-all-button" onClick={() => props.setSelectedGroup(pendingIds)}>Marcar todos como tomados</button>}
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       {!schedule.confirmedAt && <div className="confirmation-bar"><button className="primary-button" onClick={props.confirmDay}>Confirmar meu dia</button><button className="secondary-button" onClick={props.adjust}>Ajustar refeições ou sono</button></div>}
@@ -620,6 +653,14 @@ function TodayView(props: TodayProps) {
           take={props.takeDose}
           skip={props.skipDose}
           snooze={props.snoozeDose}
+        />
+      )}
+
+      {props.selectedGroup && (
+        <GroupDoseSheet
+          doses={props.selectedGroup.map((id) => schedule.doses.find((dose) => dose.id === id)).filter((dose): dose is DoseRecord => Boolean(dose))}
+          close={() => props.setSelectedGroup(null)}
+          takeAll={(time) => props.takeAllDoses(props.selectedGroup!, time)}
         />
       )}
     </section>
@@ -669,6 +710,27 @@ function DoseSheet({ dose, close, take, skip, snooze }: { dose: DoseRecord; clos
             <div className="split-actions"><button onClick={() => snooze(dose)}>Adiar lembrete 10 min</button><button className="danger-text" onClick={() => skip(dose)}>Não tomei</button></div>
           </div>
         )}
+      </section>
+    </div>
+  );
+}
+
+function GroupDoseSheet({ doses, close, takeAll }: { doses: DoseRecord[]; close: () => void; takeAll: (time: string) => void }) {
+  const [otherTime, setOtherTime] = useState(nowInSaoPaulo().time);
+  const scheduledMinute = doses[0]?.scheduledMinute ?? null;
+  const sameSchedule = doses.every((dose) => dose.scheduledMinute === scheduledMinute);
+  return (
+    <div className="sheet-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && close()}>
+      <section className="dose-sheet" role="dialog" aria-modal="true" aria-labelledby="group-dose-title">
+        <button className="sheet-close" onClick={close} aria-label="Fechar"><X aria-hidden="true" /></button>
+        <p className="eyebrow">{scheduledMinute === null ? "Horário a revisar" : `Planejado para ${formatClock(scheduledMinute)}`}</p>
+        <h2 id="group-dose-title">{doses.length} medicamentos</h2>
+        <ul className="group-dose-list">{doses.map((dose) => <li key={dose.id}><strong>{dose.medicationName}</strong><small>{dose.quantity} {dose.doseUnit}</small></li>)}</ul>
+        <div className="dose-actions">
+          <button className="primary-button large" onClick={() => takeAll(nowInSaoPaulo().time)}>Tomei todos agora <small>{nowInSaoPaulo().time}</small></button>
+          {sameSchedule && scheduledMinute !== null && <button className="secondary-button" onClick={() => takeAll(formatClock(scheduledMinute))}>Tomei todos no horário planejado</button>}
+          <label>Informar outro horário para todos<div><input type="time" value={otherTime} onChange={(event) => setOtherTime(event.target.value)} /><button onClick={() => takeAll(otherTime)}>Registrar</button></div></label>
+        </div>
       </section>
     </div>
   );
