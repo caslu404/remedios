@@ -190,6 +190,15 @@ describe("recalculateAfterDoseTaken", () => {
     expect(thirdAfter.scheduledMinute).toBe(22 * 60 + 30);
   });
 
+  it("move a rifaximina noturna automaticamente, já que a política de atraso foi confirmada por Lucas", () => {
+    const schedule = generateDailySchedule(input());
+    const first = schedule.doses.find((dose) => dose.medicationId === "rifaximina" && dose.sequenceNumber === 1)!;
+    const updated = recalculateAfterDoseTaken({ doseId: first.id, takenTime: "07:30" }, schedule, INITIAL_TREATMENT_PHASES);
+    const second = updated.doses.find((dose) => dose.medicationId === "rifaximina" && dose.sequenceNumber === 2)!;
+    expect(second.scheduledMinute).toBe(19 * 60 + 30);
+    expect(updated.conflicts.some((item) => item.code === "RESCHEDULE_POLICY_UNCONFIRMED")).toBe(false);
+  });
+
   it("é idempotente para clique duplicado", () => {
     const schedule = generateDailySchedule(input());
     const dose = schedule.doses.find((item) => item.medicationId === "rifaximina")!;
