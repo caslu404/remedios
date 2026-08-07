@@ -150,7 +150,12 @@ function hasStaleConflictSignals(schedule: DailySchedule): boolean {
   const hasLateMetronidazol = schedule.doses.some(
     (dose) => dose.medicationId === "metronidazol" && dose.scheduledMinute !== null && dose.scheduledMinute > schedule.plannedBedMinute,
   );
-  return hasUnconfirmedGrouping || hasLateMetronidazol;
+  const hasStaleReschedulePolicy = schedule.conflicts.some((item) => {
+    if (item.code !== "RESCHEDULE_POLICY_UNCONFIRMED") return false;
+    const dose = schedule.doses.find((candidate) => item.doseIds.includes(candidate.id));
+    return dose?.medicationId !== "rifaximina";
+  });
+  return hasUnconfirmedGrouping || hasLateMetronidazol || hasStaleReschedulePolicy;
 }
 
 function hasCompletedDoseRecord(schedule: DailySchedule): boolean {
@@ -260,7 +265,41 @@ export function TreatmentApp({ demoMode }: { demoMode: boolean }) {
         }
         if (localSchedule && (usesLegacyMetronidazolAnchor(localSchedule) || hasStaleConflictSignals(localSchedule))) {
           if (hasCompletedDoseRecord(localSchedule)) {
-            setNotice("As regras atualizadas valerão nos próximos cronogramas. O dia atual foi preservado porque já contém registros.");
+            const localCopy = localSchedule;
+            let refreshed: DailySchedule | null = null;
+            if (!demoMode && navigator.onLine) {
+              try {
+                const generationResponse = await fetch("/api/schedules/generate", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    date: localCopy.date,
+                    timezone: localCopy.timezone,
+                    wakeTime: formatClock(localCopy.wakeMinute),
+                    plannedBedtime: effectivePreferences.usualBedtime,
+                    breakfastWindow: { start: effectivePreferences.breakfastStart, end: effectivePreferences.breakfastEnd },
+                    dinnerWindow: { start: effectivePreferences.dinnerStart, end: effectivePreferences.dinnerEnd },
+                  }),
+                });
+                if (generationResponse.ok) {
+                  for (const item of recoveryEvents(localCopy)) await queueOfflineEvent(item);
+                  await flushOfflineEvents();
+                  const refreshedResponse = await fetch("/api/schedules/today");
+                  refreshed = refreshedResponse.ok ? ((await refreshedResponse.json()) as { schedule: DailySchedule | null }).schedule : null;
+                }
+              } catch {
+                refreshed = null;
+              }
+            }
+            if (refreshed) {
+              localSchedule = refreshed;
+              setSchedule(refreshed);
+              await saveSchedule(refreshed);
+              await reloadHistory();
+              setNotice("Atualizamos as regras do seu cronograma e mantivemos as doses já registradas hoje.");
+            } else {
+              setNotice("As regras atualizadas valerão nos próximos cronogramas. O dia atual foi preservado porque já contém registros.");
+            }
           } else {
             await deleteSchedule(today);
             localSchedule = null;

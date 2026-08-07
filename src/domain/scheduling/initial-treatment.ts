@@ -35,6 +35,12 @@ const metronidazolReschedule = {
   source: CONFIRMED_WITH_PRESCRIBER,
 } as const;
 
+const patientConfirmedReschedule = {
+  moveFutureDoses: true,
+  confirmed: true,
+  source: CONFIRMED_BY_PATIENT,
+} as const;
+
 export const INITIAL_TREATMENT_PHASES: MedicationPhase[] = [
   {
     id: "nexium-continuo",
@@ -50,7 +56,7 @@ export const INITIAL_TREATMENT_PHASES: MedicationPhase[] = [
     interval: unvalidatedInterval(null),
     rigidity: "high",
     slotStrategy: "wake",
-    reschedulePolicy: conservativeReschedule,
+    reschedulePolicy: patientConfirmedReschedule,
   },
   {
     id: "nac-fase-unica",
@@ -65,7 +71,7 @@ export const INITIAL_TREATMENT_PHASES: MedicationPhase[] = [
     interval: unvalidatedInterval(null),
     rigidity: "high",
     slotStrategy: "wake",
-    reschedulePolicy: conservativeReschedule,
+    reschedulePolicy: patientConfirmedReschedule,
     morningGroupingWithNexium: {
       confirmed: true,
       source: CONFIRMED_BY_PATIENT,
@@ -121,7 +127,7 @@ export const INITIAL_TREATMENT_PHASES: MedicationPhase[] = [
     interval: unvalidatedInterval(null),
     rigidity: "high",
     slotStrategy: "meal_blocks",
-    reschedulePolicy: conservativeReschedule,
+    reschedulePolicy: patientConfirmedReschedule,
   },
   {
     id: "berberina-fase-2",
@@ -136,7 +142,7 @@ export const INITIAL_TREATMENT_PHASES: MedicationPhase[] = [
     interval: unvalidatedInterval(null),
     rigidity: "high",
     slotStrategy: "meal_blocks",
-    reschedulePolicy: conservativeReschedule,
+    reschedulePolicy: patientConfirmedReschedule,
   },
   {
     id: "oregano-fase-unica",
@@ -151,6 +157,6 @@ export const INITIAL_TREATMENT_PHASES: MedicationPhase[] = [
     interval: unvalidatedInterval(null),
     rigidity: "high",
     slotStrategy: "before_dinner",
-    reschedulePolicy: conservativeReschedule,
+    reschedulePolicy: patientConfirmedReschedule,
   },
 ];
