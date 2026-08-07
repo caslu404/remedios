@@ -39,6 +39,9 @@ function instructionFor(phase: MedicationPhase, sequence: number): string {
     return "Não consumir álcool durante o tratamento e por pelo menos 3 dias após a última dose.";
   }
   if (phase.medicationId === "oleo-oregano") return "Tomar antes do jantar.";
+  if (phase.medicationId === "berberina-caprilico") {
+    return sequence === 1 ? "Tomar junto com o café da manhã." : "Tomar junto com o jantar.";
+  }
   return sequence === 1 ? "Horário organizacional; sem regra de refeição confirmada." : "Segunda tomada do dia.";
 }
 

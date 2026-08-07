@@ -16,6 +16,24 @@ const conservativeReschedule = {
   source: null,
 } as const;
 
+const CONFIRMED_WITH_PRESCRIBER = "Confirmado com o médico prescritor em 07/08/2026";
+
+const metronidazolInterval = {
+  targetMinutes: 480,
+  minimumMinutes: 420,
+  maximumMinutes: 540,
+  source: CONFIRMED_WITH_PRESCRIBER,
+  confirmedAt: "2026-08-07T00:00:00Z",
+  confirmedBy: "Lucas",
+  notes: "Tolerância de até 1h para mais ou menos em torno do intervalo-alvo de 8h.",
+};
+
+const metronidazolReschedule = {
+  moveFutureDoses: true,
+  confirmed: true,
+  source: CONFIRMED_WITH_PRESCRIBER,
+} as const;
+
 export const INITIAL_TREATMENT_PHASES: MedicationPhase[] = [
   {
     id: "nexium-continuo",
@@ -80,10 +98,10 @@ export const INITIAL_TREATMENT_PHASES: MedicationPhase[] = [
     doseQuantity: 1,
     doseUnit: "comprimido",
     dosesPerDay: 3,
-    interval: unvalidatedInterval(480),
+    interval: metronidazolInterval,
     rigidity: "high",
     slotStrategy: "target_interval",
-    reschedulePolicy: conservativeReschedule,
+    reschedulePolicy: metronidazolReschedule,
   },
   {
     id: "berberina-fase-1",

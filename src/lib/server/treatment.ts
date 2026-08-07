@@ -10,9 +10,54 @@ const MEDICATION_DETAILS: Record<string, { fullName: string; strength: string; u
   "oleo-oregano": { fullName: "Óleo de orégano", strength: "250 mg", unit: "cápsula", form: "cápsula" },
 };
 
+function rescheduleRuleTimestamps(phase: MedicationPhase): { confirmed_at: string | null; confirmed_by: string | null } {
+  if (!phase.reschedulePolicy.confirmed) return { confirmed_at: null, confirmed_by: null };
+  return { confirmed_at: phase.interval.confirmedAt, confirmed_by: phase.interval.confirmedBy };
+}
+
+async function reconcilePhaseRules(supabase: SupabaseClient, userId: string): Promise<void> {
+  const { data: phaseRows, error } = await supabase.from("medication_phases").select("id,client_key,medications!inner(treatments!inner(user_id))").eq("medications.treatments.user_id", userId);
+  if (error) throw error;
+  const phaseIdByKey = new Map((phaseRows ?? []).map((row) => [row.client_key, row.id as string]));
+  for (const phase of INITIAL_TREATMENT_PHASES) {
+    const phaseId = phaseIdByKey.get(phase.id);
+    if (!phaseId) continue;
+    const { error: phaseUpdateError } = await supabase.from("medication_phases").update({
+      target_interval_minutes: phase.interval.targetMinutes,
+      minimum_interval_minutes: phase.interval.minimumMinutes,
+      maximum_interval_minutes: phase.interval.maximumMinutes,
+    }).eq("id", phaseId);
+    if (phaseUpdateError) throw phaseUpdateError;
+    const { error: intervalRuleError } = await supabase.from("medication_rules").upsert({
+      medication_phase_id: phaseId,
+      rule_type: "interval",
+      rule_config_json: phase.interval,
+      is_hard_constraint: true,
+      source: phase.interval.source,
+      confirmed_at: phase.interval.confirmedAt,
+      confirmed_by: phase.interval.confirmedBy,
+    }, { onConflict: "medication_phase_id,rule_type" });
+    if (intervalRuleError) throw intervalRuleError;
+    const rescheduleTimestamps = rescheduleRuleTimestamps(phase);
+    const { error: rescheduleRuleError } = await supabase.from("medication_rules").upsert({
+      medication_phase_id: phaseId,
+      rule_type: "reschedule_policy",
+      rule_config_json: phase.reschedulePolicy,
+      is_hard_constraint: true,
+      source: phase.reschedulePolicy.source,
+      confirmed_at: rescheduleTimestamps.confirmed_at,
+      confirmed_by: rescheduleTimestamps.confirmed_by,
+    }, { onConflict: "medication_phase_id,rule_type" });
+    if (rescheduleRuleError) throw rescheduleRuleError;
+  }
+}
+
 export async function ensureInitialTreatment(supabase: SupabaseClient, userId: string): Promise<MedicationPhase[]> {
   const { data: existing } = await supabase.from("treatments").select("id").eq("user_id", userId).eq("name", "Tratamento Adaptativo do Lucas").maybeSingle();
-  if (existing) return loadTreatmentPhases(supabase, userId);
+  if (existing) {
+    await reconcilePhaseRules(supabase, userId);
+    return loadTreatmentPhases(supabase, userId);
+  }
 
   const { data: treatment, error: treatmentError } = await supabase.from("treatments").insert({
     user_id: userId,
@@ -73,7 +118,7 @@ export async function ensureInitialTreatment(supabase: SupabaseClient, userId: s
         confirmed_by: string | null;
       }> = [
         { rule_type: "interval", rule_config_json: phase.interval, is_hard_constraint: true, source: phase.interval.source, confirmed_at: phase.interval.confirmedAt, confirmed_by: phase.interval.confirmedBy },
-        { rule_type: "reschedule_policy", rule_config_json: phase.reschedulePolicy, is_hard_constraint: true, source: phase.reschedulePolicy.source, confirmed_at: null, confirmed_by: null },
+        { rule_type: "reschedule_policy", rule_config_json: phase.reschedulePolicy, is_hard_constraint: true, source: phase.reschedulePolicy.source, ...rescheduleRuleTimestamps(phase) },
       ];
       if (phase.dependency) rules.push({ rule_type: "dependency", rule_config_json: phase.dependency, is_hard_constraint: true, source: phase.dependency.source, confirmed_at: phase.dependency.confirmed ? "2026-08-05T00:00:00Z" : null, confirmed_by: null });
       const { error: rulesError } = await supabase.from("medication_rules").insert(rules.map((rule) => ({ ...rule, medication_phase_id: insertedPhase.id })));
