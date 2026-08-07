@@ -138,7 +138,7 @@ describe("recalculateAfterDoseTaken", () => {
   it("registra o horário real, mas não move doses sem política validada", () => {
     const phases: MedicationPhase[] = structuredClone(INITIAL_TREATMENT_PHASES);
     const metro = phases.find((phase) => phase.medicationId === "metronidazol")!;
-    metro.reschedulePolicy = { moveFutureDoses: null, confirmed: false, source: null };
+    metro.reschedulePolicy = { moveFutureDoses: null, confirmed: false, source: null, confirmedAt: null, confirmedBy: null };
     const schedule = generateDailySchedule(input({ phases }));
     const second = schedule.doses.find((dose) => dose.medicationId === "metronidazol" && dose.sequenceNumber === 2)!;
     const thirdBefore = schedule.doses.find((dose) => dose.medicationId === "metronidazol" && dose.sequenceNumber === 3)!.scheduledMinute;
@@ -164,7 +164,7 @@ describe("recalculateAfterDoseTaken", () => {
   it("move doses futuras no intervalo-alvo somente com política explicitamente confirmada", () => {
     const phases: MedicationPhase[] = structuredClone(INITIAL_TREATMENT_PHASES);
     const metro = phases.find((phase) => phase.medicationId === "metronidazol")!;
-    metro.reschedulePolicy = { moveFutureDoses: true, confirmed: true, source: "Validação de teste" };
+    metro.reschedulePolicy = { moveFutureDoses: true, confirmed: true, source: "Validação de teste", confirmedAt: "2026-08-05T12:00:00Z", confirmedBy: "Profissional de teste" };
     metro.interval.minimumMinutes = 450;
     metro.interval.maximumMinutes = 510;
     const schedule = generateDailySchedule(input({ phases }));

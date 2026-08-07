@@ -27,12 +27,16 @@ const metronidazolReschedule = {
   moveFutureDoses: true,
   confirmed: true,
   source: CONFIRMED_WITH_PRESCRIBER,
+  confirmedAt: "2026-08-07T00:00:00Z",
+  confirmedBy: "Lucas",
 } as const;
 
 const patientConfirmedReschedule = {
   moveFutureDoses: true,
   confirmed: true,
   source: CONFIRMED_BY_PATIENT,
+  confirmedAt: "2026-08-07T00:00:00Z",
+  confirmedBy: "Lucas",
 } as const;
 
 export const INITIAL_TREATMENT_PHASES: MedicationPhase[] = [

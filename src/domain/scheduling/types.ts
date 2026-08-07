@@ -56,6 +56,8 @@ export interface MedicationPhase {
     moveFutureDoses: boolean | null;
     confirmed: boolean;
     source: string | null;
+    confirmedAt: string | null;
+    confirmedBy: string | null;
   };
 }
 
