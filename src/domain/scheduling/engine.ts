@@ -391,33 +391,36 @@ export function recalculateAfterDoseTaken(
   if (!phase) throw new Error("Fase da dose não encontrada.");
 
   const addedConflicts: ScheduleConflict[] = [];
-  if (!phase.reschedulePolicy.confirmed || phase.reschedulePolicy.moveFutureDoses !== true) {
-    addedConflicts.push(
-      conflict(
-        "RESCHEDULE_POLICY_UNCONFIRMED",
-        "O horário real foi salvo, mas as próximas doses não foram movidas porque a política de atraso ainda não foi validada.",
-        [dose.id],
-        "warning",
-        true,
-      ),
-    );
-  } else if (phase.interval.targetMinutes !== null) {
-    const following = updatedDoses
-      .filter((candidate) => candidate.phaseId === phase.id && candidate.sequenceNumber > dose.sequenceNumber && candidate.takenMinute === null)
-      .sort((a, b) => a.sequenceNumber - b.sequenceNumber);
-    let anchor = takenMinute;
-    let anchorSequence = dose.sequenceNumber;
-    for (const candidate of following) {
-      const proposed = anchor + phase.interval.targetMinutes * (candidate.sequenceNumber - anchorSequence);
-      if (proposed >= 1440) {
-        candidate.status = "requires_review";
-        addedConflicts.push(conflict("RESCHEDULE_CROSSES_DAY", "O reagendamento ultrapassaria o dia atual.", [candidate.id], "blocking", true));
-        continue;
+  const following = updatedDoses
+    .filter((candidate) => candidate.phaseId === phase.id && candidate.sequenceNumber > dose.sequenceNumber && candidate.takenMinute === null)
+    .sort((a, b) => a.sequenceNumber - b.sequenceNumber);
+  if (following.length > 0) {
+    if (!phase.reschedulePolicy.confirmed || phase.reschedulePolicy.moveFutureDoses !== true) {
+      addedConflicts.push(
+        conflict(
+          "RESCHEDULE_POLICY_UNCONFIRMED",
+          "O horário real foi salvo, mas as próximas doses não foram movidas porque a política de atraso ainda não foi validada.",
+          [dose.id],
+          "warning",
+          true,
+        ),
+      );
+    } else if (phase.interval.targetMinutes !== null) {
+      let anchor = takenMinute;
+      let anchorSequence = dose.sequenceNumber;
+      for (const candidate of following) {
+        const proposed = anchor + phase.interval.targetMinutes * (candidate.sequenceNumber - anchorSequence);
+        if (proposed >= 1440) {
+          candidate.status = "requires_review";
+          addedConflicts.push(conflict("RESCHEDULE_CROSSES_DAY", "O reagendamento ultrapassaria o dia atual.", [candidate.id], "blocking", true));
+          continue;
+        }
+        const bounded = Math.min(proposed, schedule.plannedBedMinute);
+        candidate.scheduledMinute = bounded;
+        candidate.scheduledAtLocal = localDateTime(schedule.date, bounded);
+        anchor = bounded;
+        anchorSequence = candidate.sequenceNumber;
       }
-      candidate.scheduledMinute = proposed;
-      candidate.scheduledAtLocal = localDateTime(schedule.date, proposed);
-      anchor = proposed;
-      anchorSequence = candidate.sequenceNumber;
     }
   }
 

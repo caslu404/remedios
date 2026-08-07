@@ -157,7 +157,7 @@ describe("recalculateAfterDoseTaken", () => {
     const second = schedule.doses.find((dose) => dose.medicationId === "metronidazol" && dose.sequenceNumber === 2)!;
     const updated = recalculateAfterDoseTaken({ doseId: second.id, takenTime: "15:42" }, schedule, INITIAL_TREATMENT_PHASES);
     const third = updated.doses.find((dose) => dose.medicationId === "metronidazol" && dose.sequenceNumber === 3)!;
-    expect(third.scheduledMinute).toBe(1422);
+    expect(third.scheduledMinute).toBe(1410);
     expect(updated.conflicts.some((item) => item.code === "RESCHEDULE_POLICY_UNCONFIRMED")).toBe(false);
   });
 
@@ -170,7 +170,24 @@ describe("recalculateAfterDoseTaken", () => {
     const schedule = generateDailySchedule(input({ phases }));
     const second = schedule.doses.find((dose) => dose.medicationId === "metronidazol" && dose.sequenceNumber === 2)!;
     const updated = recalculateAfterDoseTaken({ doseId: second.id, takenTime: "15:42" }, schedule, phases);
-    expect(updated.doses.find((dose) => dose.medicationId === "metronidazol" && dose.sequenceNumber === 3)?.scheduledMinute).toBe(1422);
+    expect(updated.doses.find((dose) => dose.medicationId === "metronidazol" && dose.sequenceNumber === 3)?.scheduledMinute).toBe(1410);
+  });
+
+  it("não avisa sobre política de atraso quando não há dose futura no dia para mover", () => {
+    const schedule = generateDailySchedule(input());
+    const nexium = schedule.doses.find((dose) => dose.medicationId === "nexium")!;
+    const updated = recalculateAfterDoseTaken({ doseId: nexium.id, takenTime: "07:10" }, schedule, INITIAL_TREATMENT_PHASES);
+    expect(updated.conflicts.some((item) => item.code === "RESCHEDULE_POLICY_UNCONFIRMED")).toBe(false);
+  });
+
+  it("trava o reagendamento de metronidazol no horário de dormir mesmo após tomar uma dose atrasada", () => {
+    const schedule = generateDailySchedule(input({ plannedBedtime: "22:30" }));
+    const third = schedule.doses.find((dose) => dose.medicationId === "metronidazol" && dose.sequenceNumber === 3)!;
+    expect(third.scheduledMinute).toBe(22 * 60 + 20);
+    const second = schedule.doses.find((dose) => dose.medicationId === "metronidazol" && dose.sequenceNumber === 2)!;
+    const updated = recalculateAfterDoseTaken({ doseId: second.id, takenTime: "15:00" }, schedule, INITIAL_TREATMENT_PHASES);
+    const thirdAfter = updated.doses.find((dose) => dose.medicationId === "metronidazol" && dose.sequenceNumber === 3)!;
+    expect(thirdAfter.scheduledMinute).toBe(22 * 60 + 30);
   });
 
   it("é idempotente para clique duplicado", () => {
